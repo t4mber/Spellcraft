@@ -1,0 +1,4 @@
+packages: .
+
+-- Use GHC 9.2 or later for best DataKinds support
+-- (Currently using 9.6.7)

@@ -1,0 +1,108 @@
+cabal-version:      3.0
+name:               vhdl-analyzer
+version:            0.1.0.0
+synopsis:           VHDL Hardware-Safety Static Analyzer
+description:
+  A static analysis tool for VHDL that verifies physical hardware constraints
+  (frequencies, thermal limits, etc.) before synthesis using type-level programming.
+license:            BSD-3-Clause
+author:             ADC Code Generator
+maintainer:         dev@example.com
+category:           Hardware
+build-type:         Simple
+
+common shared-properties
+  default-language: Haskell2010
+  ghc-options:
+    -Wall
+    -Wcompat
+    -Widentities
+    -Wincomplete-record-updates
+    -Wincomplete-uni-patterns
+    -Wmissing-export-lists
+    -Wmissing-home-modules
+    -Wpartial-fields
+    -Wredundant-constraints
+  default-extensions:
+    DataKinds
+    GADTs
+    KindSignatures
+    TypeFamilies
+    TypeOperators
+    OverloadedStrings
+    LambdaCase
+    ScopedTypeVariables
+    FlexibleContexts
+    FlexibleInstances
+    NumericUnderscores
+    DuplicateRecordFields
+
+library
+  import: shared-properties
+  hs-source-dirs: src
+  exposed-modules:
+    VHDL.AST
+    VHDL.Parser
+    VHDL.Lexer
+    VHDL.SourceLocation
+    VHDL.Constraint.Types
+    VHDL.Constraint.Library
+    VHDL.Constraint.Units
+    VHDL.Constraint.Violation
+    VHDL.Clash.Types
+    VHDL.Clash.FrequencyCheck
+    VHDL.Clash.Domains
+    VHDL.Clash.Constraints
+    VHDL.Analysis.ClockGraph
+    VHDL.Analysis.Propagation
+    VHDL.Analysis.Violation
+    VHDL.Analysis.FrequencyCalc
+    VHDL.Analysis.Combinatorial
+    VHDL.Analysis.Process
+    VHDL.Analysis.Expression
+    VHDL.CLI.Options
+    VHDL.CLI.Format
+    VHDL.CLI.Report
+    VHDL.CLI.Color
+    ComponentLibs.TestComponents
+  build-depends:
+    , base >= 4.14 && < 5
+    , text >= 1.2
+    , containers >= 0.6
+    , megaparsec >= 9.0
+    , parser-combinators >= 1.3
+    , filepath >= 1.4
+    , aeson >= 2.0
+    , optparse-applicative >= 0.17
+    , ansi-terminal >= 0.11
+    , mtl >= 2.2
+    , clash-prelude >= 1.8
+    , clash-ghc >= 1.8
+
+executable vhdl-analyzer
+  import: shared-properties
+  main-is: Main.hs
+  hs-source-dirs: app
+  build-depends:
+    , base
+    , vhdl-analyzer
+  ghc-options: -threaded -rtsopts -with-rtsopts=-N
+
+test-suite vhdl-analyzer-test
+  import: shared-properties
+  type: exitcode-stdio-1.0
+  hs-source-dirs: test
+  main-is: Spec.hs
+  other-modules:
+    VHDL.ParserSpec
+    VHDL.Constraint.LibrarySpec
+    VHDL.Analysis.ClockGraphSpec
+    VHDL.Analysis.CombinatorialSpec
+  build-depends:
+    , base
+    , vhdl-analyzer
+    , hspec >= 2.9
+    , QuickCheck >= 2.14
+    , text
+    , containers
+  ghc-options: -threaded -rtsopts -with-rtsopts=-N

@@ -1,0 +1,57 @@
+# Haskell build artifacts
+dist-newstyle/
+dist/
+cabal-dev/
+.cabal-sandbox/
+cabal.sandbox.config
+*.hi
+*.o
+*.p_hi
+*.p_o
+*.dyn_hi
+*.dyn_o
+*.prof
+*.aux
+*.hp
+*.eventlog
+.stack-work/
+stack.yaml.lock
+
+# GHCi
+.ghci
+.ghc.environment.*
+
+# Build outputs
+vhdl-analyzer
+*.exe
+
+# Generated documentation
+.haddock/
+
+# IDE/Editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+*.code-workspace
+.direnv/
+
+# Test/benchmark outputs
+*.tix
+.hpc/
+
+# Logs and temporary files
+*.log
+*.tmp
+build.log
+
+# ADC working directory (user-created)
+adc
+contracts/
+
+# OS files
+.DS_Store
+Thumbs.db
+
