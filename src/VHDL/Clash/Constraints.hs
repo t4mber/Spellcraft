@@ -3,7 +3,7 @@
 {-# LANGUAGE ConstraintKinds #-}
 {-# LANGUAGE TypeApplications #-}
 
--- ADC-IMPLEMENTS: vhdl-analyzer-adc-006
+-- ADC-IMPLEMENTS: spellcraft-adc-006
 module VHDL.Clash.Constraints
   ( -- * Type-Level Constraint Checking
     HardwareConstraint
@@ -52,7 +52,7 @@ import VHDL.Constraint.Types
 import VHDL.SourceLocation (SourceLocation, mkSourceLocation)
 
 -- | General hardware constraint kind
--- Contract: vhdl-analyzer-adc-006 Section: Type-Level Constraint Checking
+-- Contract: spellcraft-adc-006 Section: Type-Level Constraint Checking
 type HardwareConstraint = Constraint
 
 -- | Frequency constraint: signal frequency must be within bounds
@@ -65,7 +65,7 @@ type PowerConstraint (freq :: FreqMHz) (maxFreq :: FreqMHz) =
   CheckMaxFreq freq maxFreq
 
 -- | Runtime constraint check result
--- Contract: vhdl-analyzer-adc-006 Section: Constraint Validation
+-- Contract: spellcraft-adc-006 Section: Constraint Validation
 data ConstraintCheck
   = FrequencyCheck
     { checkName :: Text
@@ -96,7 +96,7 @@ data ConstraintResult
   deriving (Show, Eq)
 
 -- | Validate all hardware constraints for a signal
--- Contract: vhdl-analyzer-adc-006 Section: Constraint Validation
+-- Contract: spellcraft-adc-006 Section: Constraint Validation
 validateHardwareConstraints :: forall freq a.
                                KnownNat freq
                             => HWSignal freq a
@@ -215,7 +215,7 @@ satisfiesAny = any isSatisfied
     isSatisfied _ = False
 
 -- | Convert a ConstraintResult to a ConstraintViolation
--- Contract: vhdl-analyzer-adc-006 Section: Integration
+-- Contract: spellcraft-adc-006 Section: Integration
 toViolation :: ConstraintResult -> Maybe ConstraintViolation
 toViolation (ConstraintSatisfied _) = Nothing
 toViolation (ConstraintViolated check reason) =
@@ -246,7 +246,7 @@ toViolation (ConstraintViolated check reason) =
         }
 
 -- | Create constraint checks from a ComponentSpec
--- Contract: vhdl-analyzer-adc-006 Section: Integration
+-- Contract: spellcraft-adc-006 Section: Integration
 fromComponentSpec :: ComponentSpec -> [ConstraintCheck]
 fromComponentSpec spec =
   let portChecks = map portToCheck (compSpecPorts spec)

@@ -1,6 +1,6 @@
 {-# LANGUAGE OverloadedStrings #-}
 
--- ADC-IMPLEMENTS: vhdl-analyzer-adc-001
+-- ADC-IMPLEMENTS: spellcraft-adc-001
 module VHDL.Lexer
   ( -- * Lexer
     Parser
@@ -27,7 +27,7 @@ import Text.Megaparsec.Char
 import qualified Text.Megaparsec.Char.Lexer as L
 
 -- | Parser type
--- Contract: vhdl-analyzer-adc-001 Section: Interface
+-- Contract: spellcraft-adc-001 Section: Interface
 type Parser = Parsec Void Text
 
 -- | Space consumer (whitespace and comments)

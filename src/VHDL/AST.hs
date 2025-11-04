@@ -1,6 +1,6 @@
 {-# LANGUAGE DeriveGeneric #-}
 
--- ADC-IMPLEMENTS: vhdl-analyzer-adc-001
+-- ADC-IMPLEMENTS: spellcraft-adc-001
 module VHDL.AST
   ( -- * Design
     VHDLDesign(..)
@@ -25,7 +25,7 @@ import GHC.Generics (Generic)
 import VHDL.SourceLocation (SourceLocation)
 
 -- | A complete VHDL design (entities and architectures)
--- Contract: vhdl-analyzer-adc-001 Section: Interface
+-- Contract: spellcraft-adc-001 Section: Interface
 data VHDLDesign = VHDLDesign
   { designEntities :: [Entity]
   , designArchitectures :: [Architecture]

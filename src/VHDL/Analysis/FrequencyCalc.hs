@@ -1,4 +1,4 @@
--- ADC-IMPLEMENTS: vhdl-analyzer-adc-003
+-- ADC-IMPLEMENTS: spellcraft-adc-003
 module VHDL.Analysis.FrequencyCalc
   ( calculateOutputFrequency
   ) where
@@ -12,7 +12,7 @@ import VHDL.Constraint.Types (ComponentSpec(..), GenericConstraint(..))
 import VHDL.SourceLocation (mkSourceLocation)
 
 -- | Calculate output frequency for a component given its generics and input frequency
--- Contract: vhdl-analyzer-adc-003 Section: Interface
+-- Contract: spellcraft-adc-003 Section: Interface
 calculateOutputFrequency
   :: ComponentSpec
   -> [(Identifier, Value)]  -- Generic map

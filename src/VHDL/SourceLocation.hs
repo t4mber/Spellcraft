@@ -1,6 +1,6 @@
 {-# LANGUAGE DeriveGeneric #-}
 
--- ADC-IMPLEMENTS: vhdl-analyzer-adc-001
+-- ADC-IMPLEMENTS: spellcraft-adc-001
 module VHDL.SourceLocation
   ( SourceLocation(..)
   , mkSourceLocation
@@ -13,7 +13,7 @@ import qualified Data.Text as T
 import GHC.Generics (Generic)
 
 -- | Source code location for error reporting
--- Contract: vhdl-analyzer-adc-001 Section: Interface
+-- Contract: spellcraft-adc-001 Section: Interface
 data SourceLocation = SourceLocation
   { locFile :: FilePath
   , locLine :: Int

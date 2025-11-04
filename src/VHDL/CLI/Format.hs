@@ -1,6 +1,6 @@
 {-# LANGUAGE OverloadedStrings #-}
 
--- ADC-IMPLEMENTS: vhdl-analyzer-adc-005
+-- ADC-IMPLEMENTS: spellcraft-adc-005
 module VHDL.CLI.Format
   ( -- * Formatting
     formatViolation
@@ -18,7 +18,7 @@ import VHDL.Parser (ParseError(..))
 import VHDL.SourceLocation (formatLocation)
 
 -- | Format constraint violation
--- Contract: vhdl-analyzer-adc-005 Section: Interface
+-- Contract: spellcraft-adc-005 Section: Interface
 formatViolation :: OutputFormat -> ConstraintViolation -> Text
 formatViolation fmt (FrequencyViolation comp port actual maxFreq loc) =
   case fmt of
@@ -48,7 +48,7 @@ formatViolation fmt (FanOutViolation comp port actualFanOut maxFanOut loc) =
       (T.unpack comp) (T.unpack port) actualFanOut maxFanOut
 
 -- | Format complexity warning
--- Contract: vhdl-analyzer-adc-005 Section: Interface
+-- Contract: spellcraft-adc-005 Section: Interface
 formatComplexityWarning :: OutputFormat -> ComplexityWarning -> Text
 formatComplexityWarning fmt warning =
   let loc = cpLocation (cwPath warning)
@@ -63,7 +63,7 @@ formatComplexityWarning fmt warning =
       depth threshold
 
 -- | Format parse error
--- Contract: vhdl-analyzer-adc-005 Section: Interface
+-- Contract: spellcraft-adc-005 Section: Interface
 formatParseError :: OutputFormat -> ParseError -> Text
 formatParseError fmt err =
   let loc = parseErrorLocation err

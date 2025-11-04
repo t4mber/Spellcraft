@@ -1,6 +1,6 @@
 {-# LANGUAGE DeriveGeneric #-}
 
--- ADC-IMPLEMENTS: vhdl-analyzer-adc-004
+-- ADC-IMPLEMENTS: spellcraft-adc-004
 module VHDL.Analysis.Process
   ( -- * Process AST
     Process(..)
@@ -14,7 +14,7 @@ import VHDL.Analysis.Expression (Expression)
 import VHDL.SourceLocation (SourceLocation)
 
 -- | VHDL process
--- Contract: vhdl-analyzer-adc-004 Section: Interface
+-- Contract: spellcraft-adc-004 Section: Interface
 data Process = Process
   { procName :: Maybe Identifier
   , procSensitivity :: [SignalName]

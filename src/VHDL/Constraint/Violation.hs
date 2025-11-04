@@ -1,4 +1,4 @@
--- ADC-IMPLEMENTS: vhdl-analyzer-adc-002
+-- ADC-IMPLEMENTS: spellcraft-adc-002
 module VHDL.Constraint.Violation
   ( -- * Violation Checking
     checkGenericValue
@@ -17,7 +17,7 @@ import VHDL.Constraint.Types
 import VHDL.SourceLocation (SourceLocation, mkSourceLocation)
 
 -- | Check if a generic value satisfies its constraint
--- Contract: vhdl-analyzer-adc-002 Section: Interface
+-- Contract: spellcraft-adc-002 Section: Interface
 checkGenericValue
   :: GenericConstraint
   -> Value
@@ -49,7 +49,7 @@ checkGenericValue constraint val loc compName =
     _ -> Nothing
 
 -- | Check if a port frequency satisfies its constraint
--- Contract: vhdl-analyzer-adc-002 Section: Interface
+-- Contract: spellcraft-adc-002 Section: Interface
 checkPortFrequency
   :: PortConstraint
   -> Double  -- Actual frequency in MHz

@@ -1,6 +1,6 @@
 {-# LANGUAGE DeriveGeneric #-}
 
--- ADC-IMPLEMENTS: vhdl-analyzer-adc-003
+-- ADC-IMPLEMENTS: spellcraft-adc-003
 module VHDL.Analysis.ClockGraph
   ( -- * Clock Graph
     ClockGraph(..)
@@ -14,25 +14,32 @@ module VHDL.Analysis.ClockGraph
 
 import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map
+import Data.Maybe (mapMaybe, listToMaybe)
 import Data.Text (Text)
+import qualified Data.Text as T
 import GHC.Generics (Generic)
 import VHDL.AST
   ( Architecture(..)
   , ComponentInst(..)
+  , Entity(..)
   , Identifier
+  , PortDecl(..)
+  , PortDirection(..)
   , SignalName
   , VHDLDesign(..)
   )
 import VHDL.Constraint.Library (ComponentLibrary, lookupComponent)
-import VHDL.Constraint.Types (ComponentSpec, PortConstraint(..))
+import VHDL.Constraint.Types (ComponentSpec(..), PortConstraint(..))
 import VHDL.SourceLocation (SourceLocation)
 
 -- | Clock connectivity graph
--- Contract: vhdl-analyzer-adc-003 Section: Interface
+-- Contract: spellcraft-adc-003 Section: Interface
+-- Enhanced with: spellcraft-adc-007 component instance storage
 data ClockGraph = ClockGraph
   { cgNodes :: Map SignalName ClockNode
   , cgEdges :: [ClockEdge]
   , cgSources :: [ClockSource]
+  , cgComponents :: [ComponentInst]  -- Store for generic map lookup
   } deriving (Show, Eq, Generic)
 
 -- | Node in clock graph representing a signal
@@ -61,7 +68,7 @@ data ClockSource = ClockSource
   } deriving (Show, Eq, Generic)
 
 -- | Analysis errors
--- Contract: vhdl-analyzer-adc-003 Section: Interface
+-- Contract: spellcraft-adc-003 Section: Interface
 data AnalysisError
   = UnknownComponent Identifier SourceLocation
   | MissingGeneric Identifier Identifier SourceLocation
@@ -71,7 +78,8 @@ data AnalysisError
   deriving (Show, Eq)
 
 -- | Build clock graph from VHDL design
--- Contract: vhdl-analyzer-adc-003 Section: Interface
+-- Contract: spellcraft-adc-003 Section: Interface
+-- Enhanced with: spellcraft-adc-007 Section: Clock Source Detection
 buildClockGraph
   :: VHDLDesign
   -> ComponentLibrary
@@ -83,19 +91,70 @@ buildClockGraph design lib = do
 
   -- Create nodes for all signals in port maps
   let signals = concatMap extractSignals allComponents
-  let nodes = Map.fromList [(s, mkNode s) | s <- signals]
+  let baseNodes = Map.fromList [(s, mkNode s) | s <- signals]
 
-  -- Create edges from port map connections
+  -- Create edges from port map connections (with proper signal flow)
   edges <- concat <$> mapM (extractEdges lib) allComponents
 
-  -- Identify clock sources (for prototype, we'll need external specification)
-  let sources = []  -- Will be enhanced in propagation phase
+  -- Detect clock sources from entity ports (ADC-007)
+  let sources = detectClockSourcesFromDesign design
+
+  -- Assign initial frequencies to source nodes
+  let nodesWithFreqs = assignInitialFreqs baseNodes sources
 
   pure ClockGraph
-    { cgNodes = nodes
+    { cgNodes = nodesWithFreqs
     , cgEdges = edges
     , cgSources = sources
+    , cgComponents = allComponents  -- Store for frequency propagation
     }
+
+-- | Detect clock sources from design (ADC-007)
+detectClockSourcesFromDesign :: VHDLDesign -> [ClockSource]
+detectClockSourcesFromDesign design =
+  let entities = designEntities design
+  in concatMap detectEntitySources entities
+
+-- | Detect clock sources from entity input ports
+detectEntitySources :: Entity -> [ClockSource]
+detectEntitySources entity =
+  let ports = entityPorts entity
+      clockPorts = filter isClockLikePort ports
+  in map (makeClockSource entity) clockPorts
+
+-- | Check if port is clock-like (input with clock-like name)
+isClockLikePort :: PortDecl -> Bool
+isClockLikePort port =
+  case portDirection port of
+    Input -> isClockLikeName (portName port)
+    _ -> False
+
+-- | Check if a name looks like a clock signal
+isClockLikeName :: Text -> Bool
+isClockLikeName name =
+  let lowerName = T.toLower name
+  in any (`T.isInfixOf` lowerName) ["clk", "clock", "osc"]
+
+-- | Create clock source from entity port
+makeClockSource :: Entity -> PortDecl -> ClockSource
+makeClockSource entity port = ClockSource
+  { csSignal = portName port
+  , csFrequency = 50.0  -- Default; TODO: parse from comments
+  , csComponent = entityName entity
+  , csPort = portName port
+  , csLocation = entityLocation entity
+  }
+
+-- | Assign initial frequencies from sources
+assignInitialFreqs :: Map SignalName ClockNode -> [ClockSource] -> Map SignalName ClockNode
+assignInitialFreqs nodes sources =
+  foldl assignOne nodes sources
+  where
+    assignOne ns source =
+      Map.adjust (\n -> n { cnFrequency = Just (csFrequency source)
+                          , cnComponent = Just (csComponent source)
+                          , cnPort = Just (csPort source)
+                          }) (csSignal source) ns
 
 -- | Extract all signal names from a component instantiation
 extractSignals :: ComponentInst -> [SignalName]
@@ -111,19 +170,36 @@ mkNode signal = ClockNode
   }
 
 -- | Extract edges from component instantiation
+-- Enhanced with proper signal flow (ADC-007)
 extractEdges :: ComponentLibrary -> ComponentInst -> Either AnalysisError [ClockEdge]
 extractEdges lib comp = do
   case lookupComponent (compComponentName comp) lib of
     Nothing -> Left $ UnknownComponent (compComponentName comp) (compLocation comp)
     Just spec -> do
-      -- Create edges for each port connection
-      pure $ map (mkEdge comp) (compPortMap comp)
+      -- Create edges connecting input signals to output signals through component
+      pure $ buildComponentEdges comp spec
 
--- | Create a clock edge from port connection
-mkEdge :: ComponentInst -> (Identifier, SignalName) -> ClockEdge
-mkEdge comp (port, signal) = ClockEdge
-  { ceFrom = signal
-  , ceTo = signal  -- Will be refined in propagation
-  , ceComponent = compInstName comp
-  , ceInputPort = port
-  }
+-- | Build edges showing signal flow through component
+-- Fixed: Use port direction instead of name heuristics
+buildComponentEdges :: ComponentInst -> ComponentSpec -> [ClockEdge]
+buildComponentEdges comp spec =
+  let portMap = Map.fromList (compPortMap comp)
+      -- Find clock input ports (Input direction + clock-like name)
+      clockInputs = [ p | p <- compSpecPorts spec
+                        , portConstraintDirection p == Input
+                        , isClockLikeName (portConstraintName p) ]
+      -- Find clock output ports (Output direction + clock-like name)
+      clockOutputs = [ p | p <- compSpecPorts spec
+                         , portConstraintDirection p == Output
+                         , isClockLikeName (portConstraintName p) ]
+  in [ ClockEdge
+       { ceFrom = inputSig
+       , ceTo = outputSig
+       , ceComponent = compInstName comp
+       , ceInputPort = portConstraintName inp
+       }
+     | inp <- clockInputs
+     , out <- clockOutputs
+     , Just inputSig <- [Map.lookup (portConstraintName inp) portMap]
+     , Just outputSig <- [Map.lookup (portConstraintName out) portMap]
+     ]

@@ -1,0 +1,9 @@
+resolver: lts-24.18
+
+packages:
+  - .
+
+# Extra dependencies not in the resolver
+extra-deps:
+  - clash-ghc-1.8.3@sha256:9e870c7197b7d6d0be49a40cc440ddb8a42180c8f0e2fc5b4c5e29de658c40c7,9866
+  - clash-lib-1.8.3@sha256:25f36c9c73b6738200c0386c54d517a45f642c7f74e6c5478065446e1c3ea56e,15721

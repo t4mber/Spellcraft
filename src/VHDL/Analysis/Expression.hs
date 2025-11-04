@@ -1,6 +1,6 @@
 {-# LANGUAGE DeriveGeneric #-}
 
--- ADC-IMPLEMENTS: vhdl-analyzer-adc-004
+-- ADC-IMPLEMENTS: spellcraft-adc-004
 module VHDL.Analysis.Expression
   ( -- * Expressions
     Expression(..)
@@ -16,7 +16,7 @@ import GHC.Generics (Generic)
 import VHDL.AST (Identifier, Value)
 
 -- | VHDL expressions
--- Contract: vhdl-analyzer-adc-004 Section: Interface
+-- Contract: spellcraft-adc-004 Section: Interface
 data Expression
   = Literal Value
   | Variable Identifier
@@ -45,12 +45,12 @@ data UnOp
 instance ToJSON UnOp
 
 -- | Check if an operator is arithmetic
--- Contract: vhdl-analyzer-adc-004 Section: Interface
+-- Contract: spellcraft-adc-004 Section: Interface
 isArithmeticOp :: BinOp -> Bool
 isArithmeticOp op = op `elem` [Add, Sub, Mul, Div, Mod]
 
 -- | Calculate combinatorial path depth
--- Contract: vhdl-analyzer-adc-004 Section: Interface
+-- Contract: spellcraft-adc-004 Section: Interface
 calculatePathDepth :: Expression -> Int
 calculatePathDepth (Literal _) = 0
 calculatePathDepth (Variable _) = 0

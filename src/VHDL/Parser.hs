@@ -1,7 +1,7 @@
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE OverloadedStrings #-}
 
--- ADC-IMPLEMENTS: vhdl-analyzer-adc-001
+-- ADC-IMPLEMENTS: spellcraft-adc-001
 module VHDL.Parser
   ( -- * Parsing
     parseVHDLFile
@@ -57,6 +57,8 @@ convertSourcePos path posState =
 vhdlDesign :: FilePath -> Parser VHDLDesign
 vhdlDesign path = do
   sc  -- Consume initial whitespace/comments
+  -- Skip library and use clauses (not analyzed yet, but need to be consumed)
+  void $ many (try libraryClause <|> try useClause)
   entities <- many (try entityDecl)
   architectures <- many (try architectureDecl)
   eof
@@ -65,6 +67,24 @@ vhdlDesign path = do
     , designArchitectures = architectures
     , designSourceFile = path
     }
+
+-- | Parse and skip library clause
+libraryClause :: Parser ()
+libraryClause = do
+  void $ keyword "library"
+  void $ identifier
+  void $ symbol ";"
+  sc
+
+-- | Parse and skip use clause
+useClause :: Parser ()
+useClause = do
+  void $ keyword "use"
+  -- Use clause can have dots: work.all, ieee.std_logic_1164.all
+  void $ identifier
+  void $ many (try (symbol "." >> identifier))
+  void $ symbol ";"
+  sc
 
 -- | Parse entity declaration
 entityDecl :: Parser Entity
@@ -76,8 +96,8 @@ entityDecl = do
   generics <- option [] (try genericClause)
   ports <- option [] (try portClause)
   void $ keyword "end"
-  void $ optional (keyword "entity")
-  void $ optional identifier
+  void $ optional (try $ keyword "entity")
+  void $ optional (try identifier)
   void semi
   pure Entity
     { entityName = name
@@ -114,6 +134,7 @@ portClause :: Parser [PortDecl]
 portClause = do
   void $ keyword "port"
   void $ symbol "("
+  sc  -- Explicitly consume whitespace after opening paren
   ports <- try portDecl `sepBy` semi
   void $ symbol ")"
   void semi
@@ -160,10 +181,14 @@ architectureDecl = do
   -- Skip declarations section until "begin"
   _ <- skipManyTill anySingle (try $ lookAhead $ keyword "begin")
   void $ keyword "begin"
+  -- Parse component instantiations (skip processes and other constructs)
   components <- many (try componentInst)
+  -- Skip everything until "end architecture" specifically
+  _ <- skipManyTill anySingle
+        (try $ lookAhead $ keyword "end" >> keyword "architecture")
   void $ keyword "end"
-  void $ optional (keyword "architecture")
-  void $ optional identifier
+  void $ keyword "architecture"
+  void $ optional (try identifier)
   void semi
   pure Architecture
     { archName = name

@@ -1,6 +1,6 @@
 {-# LANGUAGE DeriveGeneric #-}
 
--- ADC-IMPLEMENTS: vhdl-analyzer-adc-002
+-- ADC-IMPLEMENTS: spellcraft-adc-002
 module VHDL.Constraint.Types
   ( -- * Component Specifications
     ComponentSpec(..)
@@ -19,7 +19,7 @@ import VHDL.AST (Identifier, PortDirection, Value)
 import VHDL.SourceLocation (SourceLocation)
 
 -- | Component specification with constraints
--- Contract: vhdl-analyzer-adc-002 Section: Interface
+-- Contract: spellcraft-adc-002 Section: Interface
 data ComponentSpec = ComponentSpec
   { compSpecName :: Text
   , compSpecGenerics :: [GenericConstraint]
@@ -65,7 +65,7 @@ data PortConstraint = PortConstraint
 instance ToJSON PortConstraint
 
 -- | Constraint violations
--- Contract: vhdl-analyzer-adc-002 Section: Interface
+-- Contract: spellcraft-adc-002 Section: Interface
 data ConstraintViolation
   = FrequencyViolation
       { violationComponent :: Text

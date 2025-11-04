@@ -1,4 +1,4 @@
--- ADC-IMPLEMENTS: vhdl-analyzer-adc-002
+-- ADC-IMPLEMENTS: spellcraft-adc-002
 module ComponentLibs.TestComponents
   ( testComponentLibrary
   , pll1Spec
@@ -16,7 +16,7 @@ import VHDL.Constraint.Types
   )
 
 -- | Test component library for PRD examples
--- Contract: vhdl-analyzer-adc-002 Section: Examples
+-- Contract: spellcraft-adc-002 Section: Examples
 testComponentLibrary :: ComponentLibrary
 testComponentLibrary =
   addComponent ypbprEncoderSpec $
@@ -24,7 +24,7 @@ testComponentLibrary =
   defaultComponentLibrary
 
 -- | PLL component with multiplication factor
--- Contract: vhdl-analyzer-adc-002 Section: Examples (Example 1)
+-- Contract: spellcraft-adc-002 Section: Examples (Example 1)
 pll1Spec :: ComponentSpec
 pll1Spec = ComponentSpec
   { compSpecName = "PLL_1"
@@ -39,7 +39,7 @@ pll1Spec = ComponentSpec
       [ PortConstraint
           { portConstraintName = "clk_in"
           , portConstraintDirection = Input
-          , portConstraintMaxFreq = Just 100.0  -- 100 MHz max input
+          , portConstraintMaxFreq = Nothing  -- PLLs typically accept wide frequency range
           , portConstraintFanOut = Nothing
           }
       , PortConstraint
@@ -52,7 +52,8 @@ pll1Spec = ComponentSpec
   }
 
 -- | YPbPr Encoder with max input frequency constraint
--- Contract: vhdl-analyzer-adc-002 Section: Examples (Example 2)
+-- Contract: spellcraft-adc-002 Section: Examples (Example 2)
+-- Fixed: Added output port for signal flow
 ypbprEncoderSpec :: ComponentSpec
 ypbprEncoderSpec = ComponentSpec
   { compSpecName = "YPbPr_Encoder_A"
@@ -62,6 +63,12 @@ ypbprEncoderSpec = ComponentSpec
           { portConstraintName = "pixel_clk"
           , portConstraintDirection = Input
           , portConstraintMaxFreq = Just 165.0  -- Max 165 MHz - key constraint!
+          , portConstraintFanOut = Nothing
+          }
+      , PortConstraint
+          { portConstraintName = "video_out"
+          , portConstraintDirection = Output
+          , portConstraintMaxFreq = Nothing  -- Output, no constraint
           , portConstraintFanOut = Nothing
           }
       ]

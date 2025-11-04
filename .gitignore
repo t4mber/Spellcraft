@@ -22,7 +22,7 @@ stack.yaml.lock
 .ghc.environment.*
 
 # Build outputs
-vhdl-analyzer
+spellcraft
 *.exe
 
 # Generated documentation
@@ -48,8 +48,8 @@ vhdl-analyzer
 build.log
 
 # ADC working directory (user-created)
-adc
-contracts/
+#adc
+#contracts/
 
 # OS files
 .DS_Store

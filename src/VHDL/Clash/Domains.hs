@@ -2,7 +2,7 @@
 {-# LANGUAGE AllowAmbiguousTypes #-}
 {-# LANGUAGE TypeApplications #-}
 
--- ADC-IMPLEMENTS: vhdl-analyzer-adc-006
+-- ADC-IMPLEMENTS: spellcraft-adc-006
 module VHDL.Clash.Domains
   ( -- * Clock Domain Management
     DomainRegistry
@@ -44,7 +44,7 @@ import VHDL.Clash.Types
 
 -- | Registry for managing clock domains
 -- Maps domain names to their frequency information
--- Contract: vhdl-analyzer-adc-006 Section: Clock Domain Management
+-- Contract: spellcraft-adc-006 Section: Clock Domain Management
 newtype DomainRegistry = DomainRegistry
   { unRegistry :: Map Text (Text, Integer)  -- name -> (description, freq)
   } deriving (Show, Eq)
@@ -73,7 +73,7 @@ listDomains (DomainRegistry reg) =
   [(name, desc, freq) | (name, (desc, freq)) <- Map.toList reg]
 
 -- | Relationship between two clock domains
--- Contract: vhdl-analyzer-adc-006 Section: Domain Relationships
+-- Contract: spellcraft-adc-006 Section: Domain Relationships
 data DomainRelation
   = Synchronous     -- Same frequency, phase-aligned
   | Rational        -- Frequencies are rational multiples
@@ -117,7 +117,7 @@ checkDomainCompatibility domain1 domain2 =
       (False, "Domains are asynchronous - careful synchronization required")
 
 -- | Clock domain crossing strategy
--- Contract: vhdl-analyzer-adc-006 Section: Domain Crossing
+-- Contract: spellcraft-adc-006 Section: Domain Crossing
 data CrossingStrategy
   = DirectCrossing      -- For synchronous domains
   | FIFOCrossing Int    -- FIFO-based crossing with depth
@@ -173,7 +173,7 @@ validateCrossing crossing =
           <> " incompatible with " <> T.pack (show relation) <> " domains"
 
 -- | Predefined standard clock domain types
--- Contract: vhdl-analyzer-adc-006 Section: Predefined Domains
+-- Contract: spellcraft-adc-006 Section: Predefined Domains
 
 -- | System clock domain (100 MHz)
 type System = 100

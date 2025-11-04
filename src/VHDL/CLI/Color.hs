@@ -1,4 +1,4 @@
--- ADC-IMPLEMENTS: vhdl-analyzer-adc-005
+-- ADC-IMPLEMENTS: spellcraft-adc-005
 module VHDL.CLI.Color
   ( -- * ANSI Colors
     colored
@@ -22,7 +22,7 @@ import System.Console.ANSI
 import System.IO (hIsTerminalDevice, stdout)
 
 -- | Wrap text in ANSI color codes
--- Contract: vhdl-analyzer-adc-005 Section: Constraints
+-- Contract: spellcraft-adc-005 Section: Constraints
 colored :: [SGR] -> Text -> IO Text
 colored sgr text = do
   useColor <- detectColor
@@ -47,6 +47,6 @@ bold :: Text -> IO Text
 bold = colored [SetConsoleIntensity BoldIntensity]
 
 -- | Detect if we should use color output
--- Contract: vhdl-analyzer-adc-005 Section: Tests
+-- Contract: spellcraft-adc-005 Section: Tests
 detectColor :: IO Bool
 detectColor = hIsTerminalDevice stdout

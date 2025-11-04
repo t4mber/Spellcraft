@@ -1,6 +1,6 @@
 {-# LANGUAGE DeriveGeneric #-}
 
--- ADC-IMPLEMENTS: vhdl-analyzer-adc-004
+-- ADC-IMPLEMENTS: spellcraft-adc-004
 module VHDL.Analysis.Combinatorial
   ( -- * Complexity Analysis
     CombinatorialPath(..)
@@ -20,7 +20,7 @@ import VHDL.Analysis.Process (Process(..), Statement(..))
 import VHDL.SourceLocation (SourceLocation)
 
 -- | Combinatorial path in an expression
--- Contract: vhdl-analyzer-adc-004 Section: Interface
+-- Contract: spellcraft-adc-004 Section: Interface
 data CombinatorialPath = CombinatorialPath
   { cpExpression :: Expression
   , cpDepth :: Int
@@ -41,7 +41,7 @@ data ComplexityWarning = ComplexityWarning
 instance ToJSON ComplexityWarning
 
 -- | Analyze process for complexity warnings
--- Contract: vhdl-analyzer-adc-004 Section: Interface
+-- Contract: spellcraft-adc-004 Section: Interface
 analyzeProcessComplexity
   :: Process
   -> Int  -- Threshold
@@ -52,7 +52,7 @@ analyzeProcessComplexity proc threshold =
   in map (mkWarning (procName proc) threshold) violations
 
 -- | Find all combinatorial paths in an expression
--- Contract: vhdl-analyzer-adc-004 Section: Interface
+-- Contract: spellcraft-adc-004 Section: Interface
 findCombinatorialPaths :: Expression -> [CombinatorialPath]
 findCombinatorialPaths expr =
   let depth = calculatePathDepth expr
@@ -63,7 +63,7 @@ findCombinatorialPaths expr =
      else []
 
 -- | Analyze architecture for complexity
--- Contract: vhdl-analyzer-adc-004 Section: Interface
+-- Contract: spellcraft-adc-004 Section: Interface
 analyzeArchitectureComplexity
   :: Architecture
   -> Int  -- Threshold

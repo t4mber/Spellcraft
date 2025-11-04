@@ -2,7 +2,7 @@
 {-# LANGUAGE AllowAmbiguousTypes #-}
 {-# LANGUAGE TypeApplications #-}
 
--- ADC-IMPLEMENTS: vhdl-analyzer-adc-006
+-- ADC-IMPLEMENTS: spellcraft-adc-006
 module VHDL.Clash.FrequencyCheck
   ( -- * Type-Level Frequency Constraints
     CheckMaxFreq
@@ -43,7 +43,7 @@ import VHDL.Constraint.Types (ConstraintViolation(..))
 import VHDL.SourceLocation (SourceLocation, mkSourceLocation)
 
 -- | Type-level constraint: actual frequency must be <= max frequency
--- Contract: vhdl-analyzer-adc-006 Section: Type-Level Constraint Checking
+-- Contract: spellcraft-adc-006 Section: Type-Level Constraint Checking
 type family CheckMaxFreq (actual :: FreqMHz) (max :: FreqMHz) :: Constraint where
   CheckMaxFreq actual max = (actual <=? max) ~ 'True
 
@@ -82,7 +82,7 @@ data FrequencyCheckResult
 
 -- | Safe PLL connection with type-level frequency checking
 -- The output frequency must equal input frequency times the multiplication factor
--- Contract: vhdl-analyzer-adc-006 Section: Safe Connection Functions
+-- Contract: spellcraft-adc-006 Section: Safe Connection Functions
 connectPLL :: forall inFreq factor outFreq a.
               (KnownNat inFreq, KnownNat factor, KnownNat outFreq,
                outFreq ~ FreqMult inFreq factor)
@@ -100,7 +100,7 @@ connectPLL pll inputSignal = HWSignal
 
 -- | Safe encoder connection with frequency constraint checking
 -- Returns Either to indicate constraint violation at runtime
--- Contract: vhdl-analyzer-adc-006 Section: Safe Connection Functions
+-- Contract: spellcraft-adc-006 Section: Safe Connection Functions
 connectEncoder :: forall freq maxFreq a.
                   (KnownNat freq, KnownNat maxFreq, CheckMaxFreq freq maxFreq)
                => Encoder maxFreq

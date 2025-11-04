@@ -1,4 +1,4 @@
-# VDHL Analyzer Example Files
+# Spellcraft Example Files
 
 This directory contains real-world examples demonstrating the VDHL analyzer's ability to detect hardware constraint violations.
 

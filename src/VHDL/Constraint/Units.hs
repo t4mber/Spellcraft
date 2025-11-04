@@ -1,4 +1,4 @@
--- ADC-IMPLEMENTS: vhdl-analyzer-adc-002
+-- ADC-IMPLEMENTS: spellcraft-adc-002
 module VHDL.Constraint.Units
   ( -- * Frequency Units
     FreqUnit(..)
@@ -9,7 +9,7 @@ module VHDL.Constraint.Units
   ) where
 
 -- | Frequency units
--- Contract: vhdl-analyzer-adc-002 Section: Interface
+-- Contract: spellcraft-adc-002 Section: Interface
 data FreqUnit
   = Hz
   | KHz
@@ -24,7 +24,7 @@ data Frequency = Frequency
   } deriving (Show, Eq)
 
 -- | Convert frequency to MHz for comparison
--- Contract: vhdl-analyzer-adc-002 Section: Interface
+-- Contract: spellcraft-adc-002 Section: Interface
 convertToMHz :: FreqUnit -> Double -> Double
 convertToMHz Hz n = n / 1_000_000
 convertToMHz KHz n = n / 1_000

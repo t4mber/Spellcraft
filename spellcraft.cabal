@@ -1,10 +1,11 @@
 cabal-version:      3.0
-name:               vhdl-analyzer
-version:            0.1.0.0
-synopsis:           VHDL Hardware-Safety Static Analyzer
+name:               spellcraft
+version:            0.3.0
+synopsis:           Spellcraft - Safe Programmable Electronics Linting Library
 description:
-  A static analysis tool for VHDL that verifies physical hardware constraints
-  (frequencies, thermal limits, etc.) before synthesis using type-level programming.
+  Spellcraft: Safe Programmable Electronics Linting Library & Code Review Analysis Framework Tool.
+  A hardware design verification tool that helps you craft correct VHDL/Clash designs by checking
+  physical constraints (frequencies, thermal limits, etc.) before synthesis using type-level programming.
 license:            BSD-3-Clause
 author:             ADC Code Generator
 maintainer:         dev@example.com
@@ -54,12 +55,15 @@ library
     VHDL.Clash.Domains
     VHDL.Clash.Constraints
     VHDL.Analysis.ClockGraph
+    VHDL.Analysis.ClockSource
+    VHDL.Analysis.FrequencyParser
     VHDL.Analysis.Propagation
     VHDL.Analysis.Violation
     VHDL.Analysis.FrequencyCalc
     VHDL.Analysis.Combinatorial
     VHDL.Analysis.Process
     VHDL.Analysis.Expression
+    VHDL.Analysis.ClashFile
     VHDL.CLI.Options
     VHDL.CLI.Format
     VHDL.CLI.Report
@@ -78,29 +82,28 @@ library
     , mtl >= 2.2
     , clash-prelude >= 1.8
     , clash-ghc >= 1.8
+    , process >= 1.6
 
-executable vhdl-analyzer
+executable spellcraft
   import: shared-properties
   main-is: Main.hs
   hs-source-dirs: app
   build-depends:
     , base
-    , vhdl-analyzer
+    , spellcraft
   ghc-options: -threaded -rtsopts -with-rtsopts=-N
 
-test-suite vhdl-analyzer-test
+test-suite spellcraft-test
   import: shared-properties
   type: exitcode-stdio-1.0
   hs-source-dirs: test
   main-is: Spec.hs
   other-modules:
-    VHDL.ParserSpec
-    VHDL.Constraint.LibrarySpec
-    VHDL.Analysis.ClockGraphSpec
-    VHDL.Analysis.CombinatorialSpec
+    VHDL.Clash.TypeLevelSpec
+    VHDL.Clash.ExampleValidationSpec
   build-depends:
     , base
-    , vhdl-analyzer
+    , spellcraft
     , hspec >= 2.9
     , QuickCheck >= 2.14
     , text

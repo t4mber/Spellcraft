@@ -3,7 +3,7 @@
 {-# LANGUAGE PolyKinds #-}
 {-# LANGUAGE TypeApplications #-}
 
--- ADC-IMPLEMENTS: vhdl-analyzer-adc-006
+-- ADC-IMPLEMENTS: spellcraft-adc-006
 module VHDL.Clash.Types
   ( -- * Type-Level Frequency Types
     FreqMHz
@@ -33,24 +33,24 @@ import Data.Proxy (Proxy(..))
 import qualified GHC.TypeNats as TN
 
 -- | Frequency in MHz as type-level natural
--- Contract: vhdl-analyzer-adc-006 Section: Type-Level Hardware Types
+-- Contract: spellcraft-adc-006 Section: Type-Level Hardware Types
 type FreqMHz = Nat
 
 -- | Type family for frequency multiplication
 -- Used for PLL frequency scaling
--- Contract: vhdl-analyzer-adc-006 Section: Type Families
+-- Contract: spellcraft-adc-006 Section: Type Families
 -- Note: Uses GHC.TypeNats built-in multiplication
 type FreqMult f m = f TN.* m
 
 -- | Type family for frequency division
 -- Used for clock dividers
--- Contract: vhdl-analyzer-adc-006 Section: Type Families
+-- Contract: spellcraft-adc-006 Section: Type Families
 type family FreqDiv (f :: FreqMHz) (d :: Nat) :: FreqMHz where
   FreqDiv f d = Div f d
 
 -- | Clock domain with frequency constraint
 -- The frequency is encoded at the type level for compile-time checking
--- Contract: vhdl-analyzer-adc-006 Section: Clock Domain Types
+-- Contract: spellcraft-adc-006 Section: Clock Domain Types
 data ClockDomain (freq :: FreqMHz) = ClockDomain
   { domainName :: Text
   , domainFreqMHz :: Integer
@@ -66,7 +66,7 @@ mkClockDomain name = ClockDomain
 
 -- | Clash Signal with frequency-tagged domain
 -- Combines a signal name with its clock domain
--- Contract: vhdl-analyzer-adc-006 Section: Hardware Signal Types
+-- Contract: spellcraft-adc-006 Section: Hardware Signal Types
 data HWSignal (freq :: FreqMHz) a = HWSignal
   { hwSignalName :: Text
   , hwSignalDomain :: ClockDomain freq
@@ -86,7 +86,7 @@ mkHWSignal name domain = HWSignal
 
 -- | Phase-Locked Loop (PLL) component
 -- Takes an input frequency and multiplies it by a factor
--- Contract: vhdl-analyzer-adc-006 Section: PLL Types
+-- Contract: spellcraft-adc-006 Section: PLL Types
 data PLL (inFreq :: FreqMHz) (factor :: Nat) = PLL
   { pllName :: Text
   , pllInputFreq :: Integer
@@ -109,7 +109,7 @@ mkPLL name = PLL
   }
 
 -- | Encoder component with maximum frequency constraint
--- Contract: vhdl-analyzer-adc-006 Section: Encoder Types
+-- Contract: spellcraft-adc-006 Section: Encoder Types
 data Encoder (maxFreq :: FreqMHz) = Encoder
   { encoderName :: Text
   , encoderMaxFreqMHz :: Integer

@@ -1,4 +1,4 @@
-# VDHL Analyzer - Real-World Examples
+# Spellcraft - Real-World Examples
 
 ## 📊 **Current Status**
 

@@ -1,4 +1,4 @@
--- ADC-IMPLEMENTS: vhdl-analyzer-adc-005
+-- ADC-IMPLEMENTS: spellcraft-adc-005
 module VHDL.CLI.Options
   ( -- * CLI Options
     CliOptions(..)
@@ -9,7 +9,7 @@ module VHDL.CLI.Options
 import Options.Applicative
 
 -- | CLI options
--- Contract: vhdl-analyzer-adc-005 Section: Interface
+-- Contract: spellcraft-adc-005 Section: Interface
 data CliOptions = CliOptions
   { optInputFiles :: [FilePath]
   , optVerbose :: Bool
@@ -27,18 +27,18 @@ data OutputFormat
   deriving (Show, Eq, Enum, Bounded)
 
 -- | Parse CLI options
--- Contract: vhdl-analyzer-adc-005 Section: Interface
+-- Contract: spellcraft-adc-005 Section: Interface
 parseOptions :: IO CliOptions
 parseOptions = execParser opts
   where
     opts = info (cliParser <**> helper)
       ( fullDesc
-     <> progDesc "Analyze VHDL for hardware safety constraint violations"
-     <> header "vhdl-analyzer - Hardware-Safety Static Analyzer" )
+     <> progDesc "Craft correct hardware designs - verify physical constraints before synthesis"
+     <> header "spellcraft - Safe Programmable Electronics Linting Library & Code Review Analysis Framework Tool" )
 
 cliParser :: Parser CliOptions
 cliParser = CliOptions
-  <$> some (argument str (metavar "FILES..." <> help "VHDL source files to analyze"))
+  <$> some (argument str (metavar "FILES..." <> help "VHDL (.vhd) or Clash (.hs) source files to analyze"))
   <*> switch (long "verbose" <> short 'v' <> help "Verbose output")
   <*> option formatReader
       ( long "format"
