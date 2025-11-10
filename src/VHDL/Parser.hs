@@ -3,6 +3,7 @@
 
 -- ADC-IMPLEMENTS: spellcraft-adc-001
 -- ADC-IMPLEMENTS: spellcraft-adc-008
+-- ADC-IMPLEMENTS: spellcraft-adc-012
 module VHDL.Parser
   ( -- * Parsing
     parseVHDLFile
@@ -12,6 +13,7 @@ module VHDL.Parser
 
 import Control.Monad (void)
 import Data.Aeson (ToJSON)
+import Data.Maybe (catMaybes)
 import Data.Text (Text)
 import qualified Data.Text as T
 import qualified Data.Text.IO as TIO
@@ -203,6 +205,96 @@ parseDirection = choice
   , keyword "in" >> pure Input
   ]
 
+-- | Parse signal declaration
+-- Contract: spellcraft-adc-012 Section: Signal Usage Tracker
+signalDecl :: Parser SignalDecl
+signalDecl = do
+  pos <- getSourcePos
+  void $ keyword "signal"
+  name <- identifier
+  void colon
+  sigType <- typeSpec
+  void semi
+  pure SignalDecl
+    { sigDeclName = name
+    , sigDeclType = sigType
+    , sigDeclLocation = sourcePosToLocation pos
+    }
+
+-- | Parse process statement
+-- Contract: spellcraft-adc-012 Section: Signal Usage Tracker
+processStmt :: Parser ArchStatement
+processStmt = do
+  pos <- getSourcePos
+  -- Optional process label
+  pName <- optional $ try (identifier <* colon)
+  void $ keyword "process"
+  -- Parse sensitivity list
+  sensitivity <- option [] $ parens (identifier `sepBy` comma)
+  -- Skip declarations
+  _ <- optional $ do
+    _ <- skipManyTill anySingle (try $ lookAhead $ keyword "begin")
+    pure ()
+  void $ keyword "begin"
+  -- For now, skip the process body - we'll parse statements later
+  _ <- skipManyTill anySingle (try $ lookAhead $ keyword "end" >> keyword "process")
+  void $ keyword "end"
+  void $ keyword "process"
+  void semi
+  pure ProcessStmt
+    { procName = pName
+    , procSensitivity = sensitivity
+    , procStatements = []  -- TODO: Parse sequential statements
+    , procLocation = sourcePosToLocation pos
+    }
+
+-- | Parse concurrent signal assignment
+concurrentAssignment :: Parser ArchStatement
+concurrentAssignment = do
+  pos <- getSourcePos
+  target <- identifier
+  void $ symbol "<="
+  -- For now, just capture the source as an identifier (simplified)
+  source <- identifier
+  void semi
+  pure ConcurrentAssignment
+    { concTarget = target
+    , concSource = source
+    , concLocation = sourcePosToLocation pos
+    }
+
+-- | Parse architecture-level statement (process, concurrent, or component)
+archStatement :: Parser ArchStatement
+archStatement = choice
+  [ try processStmt
+  , try (ComponentInstStmt <$> componentInst)
+  , try concurrentAssignment
+  ]
+
+-- | Skip a declaration that we don't parse (constant, type, etc.)
+skipDeclaration :: Parser ()
+skipDeclaration = do
+  -- Try to match and skip: constant, type, subtype, component, function, procedure, etc.
+  choice
+    [ try (keyword "constant" >> skipTo (void semi))
+    , try (keyword "type" >> skipTo (void semi))
+    , try (keyword "subtype" >> skipTo (void semi))
+    , try (keyword "component" >> skipTo (keyword "end" >> keyword "component" >> void semi))
+    , try (keyword "function" >> skipTo (keyword "end" >> optional (keyword "function") >> void semi))
+    , try (keyword "procedure" >> skipTo (keyword "end" >> optional (keyword "procedure") >> void semi))
+    ]
+  where
+    skipTo p = skipManyTill anySingle (try $ lookAhead p) >> p
+
+-- | Parse declaration section (signals, constants, etc.)
+parseDeclarations :: Parser [SignalDecl]
+parseDeclarations = do
+  decls <- many $ choice
+    [ try (Just <$> signalDecl)
+    , try (skipDeclaration >> pure Nothing)
+    ]
+  pure $ catMaybes decls
+
 -- | Parse architecture declaration
 architectureDecl :: Parser Architecture
 architectureDecl = do
@@ -213,11 +305,12 @@ architectureDecl = do
   void $ keyword "of"
   entName <- identifier
   void $ keyword "is"
-  -- Skip declarations section until "begin"
-  _ <- skipManyTill anySingle (try $ lookAhead $ keyword "begin")
+  -- Parse declarations section (signals, constants, types, etc.)
+  signals <- parseDeclarations
+  -- We should now be at "begin"
   void $ keyword "begin"
-  -- Parse component instantiations (skip processes and other constructs)
-  components <- many (try componentInst)
+  -- Parse architecture body statements
+  statements <- many (try archStatement)
   -- Skip body until terminating "end architecture".
   -- NOTE: This currently only supports the explicit "end architecture" form,
   -- not the shorthand "end <name>;" form. This is a known limitation.
@@ -230,7 +323,9 @@ architectureDecl = do
   pure Architecture
     { archName = name
     , archEntityName = entName
-    , archComponents = components
+    , archSignals = signals
+    , archStatements = statements
+    , archComponents = [c | ComponentInstStmt c <- statements]
     , archLocation = sourcePosToLocation pos
     }
 

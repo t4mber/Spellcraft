@@ -64,6 +64,7 @@ library
     VHDL.Analysis.Process
     VHDL.Analysis.Expression
     VHDL.Analysis.ClashFile
+    VHDL.Analysis.SignalUsage
     VHDL.CLI.Options
     VHDL.CLI.Format
     VHDL.CLI.Report

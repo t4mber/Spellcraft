@@ -2,6 +2,7 @@
 
 -- ADC-IMPLEMENTS: spellcraft-adc-001
 -- ADC-IMPLEMENTS: spellcraft-adc-008
+-- ADC-IMPLEMENTS: spellcraft-adc-012
 module VHDL.AST
   ( -- * Design
     VHDLDesign(..)
@@ -15,6 +16,9 @@ module VHDL.AST
   , PortDirection(..)
     -- * Architecture
   , Architecture(..)
+  , SignalDecl(..)
+  , ArchStatement(..)
+  , Statement(..)
   , ComponentInst(..)
     -- * Types
   , Identifier
@@ -97,10 +101,60 @@ data PortDirection
 
 instance ToJSON PortDirection
 
--- | Architecture with component instantiations
+-- | Signal declaration (e.g., "signal s_data : std_logic;")
+-- Contract: spellcraft-adc-012 Section: Signal Usage Tracker
+data SignalDecl = SignalDecl
+  { sigDeclName :: Identifier
+  , sigDeclType :: TypeName
+  , sigDeclLocation :: SourceLocation
+  } deriving (Show, Eq, Generic)
+
+instance ToJSON SignalDecl
+
+-- | Architecture-level statement (processes, concurrent, component instantiations)
+-- Contract: spellcraft-adc-012 Section: Signal Usage Tracker
+data ArchStatement
+  = ProcessStmt
+      { procName :: Maybe Identifier
+      , procSensitivity :: [SignalName]
+      , procStatements :: [Statement]
+      , procLocation :: SourceLocation
+      }
+  | ConcurrentAssignment
+      { concTarget :: SignalName
+      , concSource :: SignalName
+      , concLocation :: SourceLocation
+      }
+  | ComponentInstStmt ComponentInst
+  deriving (Show, Eq, Generic)
+
+instance ToJSON ArchStatement
+
+-- | Sequential statement (inside processes)
+-- Contract: spellcraft-adc-012 Section: Signal Usage Tracker
+data Statement
+  = SignalAssignment
+      { stmtTarget :: SignalName
+      , stmtSource :: SignalName
+      , stmtLocation :: SourceLocation
+      }
+  | IfStatement
+      { stmtCondition :: SignalName
+      , stmtThen :: [Statement]
+      , stmtElse :: [Statement]
+      , stmtLocation :: SourceLocation
+      }
+  deriving (Show, Eq, Generic)
+
+instance ToJSON Statement
+
+-- | Architecture with signals, processes, and component instantiations
+-- Contract: spellcraft-adc-012 Section: Signal Usage Tracker
 data Architecture = Architecture
   { archName :: Identifier
   , archEntityName :: Identifier
+  , archSignals :: [SignalDecl]
+  , archStatements :: [ArchStatement]
   , archComponents :: [ComponentInst]
   , archLocation :: SourceLocation
   } deriving (Show, Eq, Generic)
