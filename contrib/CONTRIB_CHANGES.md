@@ -84,3 +84,58 @@ sed -i '' 's/end architecture;$/end rtl;/' contrib/lzx/mirrorbound/*.vhd
 # Note: mirrorbound.vhd used 'end mirrorbound;' not 'end rtl;'
 sed -i '' 's/end architecture;$/end mirrorbound;/' contrib/lzx/mirrorbound/mirrorbound.vhd
 ```
+
+## 2025-11-09 - LZX Chaos Monkey Test Corpus
+
+### Purpose
+Created systematic test corpus with injected hardware violations to validate
+analyzer detection capabilities (Contract: spellcraft-adc-011).
+
+### Generated Files
+Located in `contrib/lzx-chaos/`:
+- `enhance-cat1-violation1.vhd` - Clock domain crossing violation
+- `enhance-cat3-violation1.vhd` - Undriven signal
+- `enhance-cat7-violation1.vhd` - Off-by-one array indexing
+- `chaos-violations.json` - Manifest with expected detections
+- `README.md` - Generation documentation
+
+### Generation Method
+```bash
+python3 scripts/chaos-monkey-impl.py \
+  --source contrib/lzx/lumarian/enhance.vhd \
+  --output contrib/lzx-chaos
+```
+
+### Violations Injected
+
+1. **cat1-violation1**: Unregistered CDC crossing
+   - Category: Clock Domain Violations
+   - Severity: catastrophic
+   - Status: Parser handles, detection not implemented
+
+2. **cat3-violation1**: Undriven signal
+   - Category: Signal Integrity Issues
+   - Severity: subtle
+   - Status: Parser handles, detection not implemented
+
+3. **cat7-violation1**: Off-by-one error
+   - Category: Functional Errors
+   - Severity: subtle
+   - Status: Parser handles, detection not implemented
+
+### Testing Status
+- Parser success: 3/3 files (100%)
+- All variants are syntactically valid VHDL
+- Violations are marked with inline comments
+- Manifest tracks expected detection methods
+- Current analyzer: Parses but does not detect violations yet
+
+### Next Steps
+1. Expand to 21+ violations (3 per category, 7 categories)
+2. Implement violation detection in analyzer components
+3. Compare actual detection against manifest expectations
+4. Use gaps to prioritize detection feature development
+
+### Status
+Files remain local only (not committed). Manifest and generation scripts
+are committed for reproducibility.
