@@ -1,24 +1,24 @@
 #!/usr/bin/env python3
 """
-Chaos Monkey VHDL Violation Injector
+Kaos Brownie VHDL Violation Injector
 Contract: spellcraft-adc-011
 
 This script systematically injects known hardware violations into working VHDL
 designs to create a comprehensive test suite for violation detection.
 
 Usage:
-    python scripts/chaos-monkey.py --source contrib/lzx/lumarian/enhance.vhd
+    python scripts/kaos-brownie.py --source contrib/lzx/lumarian/enhance.vhd
 
 The script will:
 1. Read the source VHDL file
 2. Generate variants with single violations injected
 3. Create a manifest documenting all violations
-4. Output test corpus to contrib/lzx-chaos/
+4. Output test corpus to contrib/lzx-kaos/
 
 IMPLEMENTATION INSTRUCTIONS FOR CLAUDE OPUS 4:
 ==============================================
 
-You are implementing a VHDL chaos monkey generator. Your goal is to inject
+You are implementing a VHDL kaos brownie generator. Your goal is to inject
 realistic hardware violations into clean VHDL code for testing purposes.
 
 STEP 1: ANALYZE SOURCE FILE
@@ -86,20 +86,20 @@ For EACH violation:
 2. Inject SINGLE violation at appropriate location
 
 3. Add marker comment at injection point:
-   -- CHAOS-MONKEY: cat1-violation1
+   -- KAOS-BROWNIE: cat1-violation1
    -- VIOLATION: Unregistered CDC crossing
    -- SEVERITY: catastrophic
    -- ORIGINAL: signal s_sync : std_logic;
    -- INJECTED: Removed synchronizer flip-flops
 
 4. Update entity name to include violation ID:
-   entity enhance_chaos_cat1_v1 is
+   entity enhance_kaos_cat1_v1 is
 
 5. Preserve all other code structure
 
 STEP 4: GENERATE MANIFEST
 -------------------------
-Create chaos-violations.json with entry for each violation:
+Create kaos-violations.json with entry for each violation:
 
 {
   "source": "contrib/lzx/lumarian/enhance.vhd",
@@ -138,9 +138,9 @@ Create chaos-violations.json with entry for each violation:
 
 STEP 5: OUTPUT
 --------------
-Write to contrib/lzx-chaos/:
+Write to contrib/lzx-kaos/:
 - All variant .vhd files (21+ files)
-- chaos-violations.json (manifest)
+- kaos-violations.json (manifest)
 - README.md (generation summary)
 
 README should include:
@@ -193,7 +193,7 @@ from datetime import datetime
 
 def main():
     parser = argparse.ArgumentParser(
-        description='Generate VHDL chaos monkey test variants',
+        description='Generate VHDL kaos brownie test variants',
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog=__doc__
     )
@@ -242,7 +242,7 @@ Output: {}
 
     print("\nNOTE: This is a specification template.")
     print("Implementation requires Claude Opus 4 or manual coding.")
-    print("See contract adc-011-chaos-monkey.qmd for full requirements.\n")
+    print("See contract adc-011-kaos-brownie.qmd for full requirements.\n")
 
     return 0
 

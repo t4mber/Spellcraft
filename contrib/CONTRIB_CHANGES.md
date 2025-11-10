@@ -85,25 +85,29 @@ sed -i '' 's/end architecture;$/end rtl;/' contrib/lzx/mirrorbound/*.vhd
 sed -i '' 's/end architecture;$/end mirrorbound;/' contrib/lzx/mirrorbound/mirrorbound.vhd
 ```
 
-## 2025-11-09 - LZX Chaos Monkey Test Corpus
+## 2025-11-09 - LZX Kaos Brownie Test Corpus
 
 ### Purpose
 Created systematic test corpus with injected hardware violations to validate
 analyzer detection capabilities (Contract: spellcraft-adc-011).
 
 ### Generated Files
-Located in `contrib/lzx-chaos/`:
+Located in `contrib/lzx-kaos/` and `contrib/lzx-kaos-levels/`:
 - `enhance-cat1-violation1.vhd` - Clock domain crossing violation
 - `enhance-cat3-violation1.vhd` - Undriven signal
 - `enhance-cat7-violation1.vhd` - Off-by-one array indexing
-- `chaos-violations.json` - Manifest with expected detections
+- `enhance-level1-undriven.vhd` - Level 1 (Obvious) undriven signal
+- `enhance-level2-partial.vhd` - Level 2 (Moderate) latch inference
+- `enhance-level3-bitgrowth.vhd` - Level 3 (Subtle) overflow
+- `enhance-level5-race.vhd` - Level 5 (Extremely Subtle) race condition
+- `kaos-violations.json` - Manifest with expected detections
 - `README.md` - Generation documentation
 
 ### Generation Method
 ```bash
-python3 scripts/chaos-monkey-impl.py \
+python3 scripts/kaos-brownie-impl.py \
   --source contrib/lzx/lumarian/enhance.vhd \
-  --output contrib/lzx-chaos
+  --output contrib/lzx-kaos
 ```
 
 ### Violations Injected

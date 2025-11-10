@@ -8,7 +8,7 @@
 ### ✅ Completed
 - **VHDL Parser** (ADC-001, ADC-009): 100% success on test corpus
 - **Signal Usage Tracker** (ADC-012 Priority 1): Detects undriven signals
-- **Chaos Monkey Framework** (ADC-011): Generates test violations
+- **Kaos Brownie Framework** (ADC-011): Generates test violations
 - **Level 1 Detection**: Successfully identifies obvious violations
 
 ### 🚧 In Progress
@@ -123,7 +123,7 @@ ADC-013 (Process Parsing) [CRITICAL PATH]
 ## Resource Requirements
 
 - **Developer Time**: 4-6 weeks total
-- **Testing**: Chaos monkey corpus + Lumarian/Mirrorbound
+- **Testing**: Kaos brownie corpus + Lumarian/Mirrorbound
 - **Documentation**: Update user guide with new features
 
 ## Contract References
@@ -133,7 +133,7 @@ ADC-013 (Process Parsing) [CRITICAL PATH]
 | [ADC-012](contracts/adc-012-violation-detection.qmd) | Violation Detection Framework | Partial | 1 |
 | [ADC-013](contracts/adc-013-process-parsing.qmd) | Process Body Parsing | Active | 1 |
 | [ADC-014](contracts/adc-014-warning-infrastructure.qmd) | Warning Infrastructure | Planned | 3 |
-| [ADC-011](contracts/adc-011-chaos-monkey.qmd) | Chaos Monkey Testing | Complete | - |
+| [ADC-011](contracts/adc-011-kaos-brownie.qmd) | Kaos Brownie Testing | Complete | - |
 
 ---
 

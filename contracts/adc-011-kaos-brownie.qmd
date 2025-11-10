@@ -1,16 +1,16 @@
 ---
-title: "Chaos Monkey VHDL Violation Injector"
+title: "Kaos Brownie VHDL Violation Injector"
 id: spellcraft-adc-011
 version: 1.0.0
 status: active
 created: 2025-11-09
 ---
 
-# Chaos Monkey VHDL Violation Injector
+# Kaos Brownie VHDL Violation Injector
 
 ## Purpose
 
-Create a systematic test harness that injects known VHDL hardware violations into working designs to validate the analyzer's detection capabilities. This "chaos monkey" approach ensures comprehensive coverage of both catastrophic and subtle hardware errors.
+Create a systematic test harness that injects known VHDL hardware violations into working designs to validate the analyzer's detection capabilities. This "kaos brownie" approach ensures comprehensive coverage of both catastrophic and subtle hardware errors.
 
 ## Motivation
 
@@ -78,14 +78,14 @@ Hardware design errors can range from obvious syntax violations to subtle timing
 ### Input
 ```yaml
 source_design: "contrib/lzx/lumarian"
-output_directory: "contrib/lzx-chaos"
-violation_manifest: "chaos-violations.json"
+output_directory: "contrib/lzx-kaos"
+violation_manifest: "kaos-violations.json"
 ```
 
 ### Output Structure
 ```
-contrib/lzx-chaos/
-├── chaos-violations.json          # Master violation catalog
+contrib/lzx-kaos/
+├── kaos-violations.json          # Master violation catalog
 ├── enhanced.vhd                   # Enhanced with violation markers
 ├── contrast-cat1-violation3.vhd   # Category 1, violation 3
 ├── gamma-cat2-violation1.vhd      # Category 2, violation 1
@@ -126,7 +126,7 @@ contrib/lzx-chaos/
 
 ### Parity: Generator Script
 
-**Location**: `scripts/chaos-monkey.py`
+**Location**: `scripts/kaos-brownie.py`
 
 The generator must:
 1. Parse source VHDL files to understand structure
@@ -144,7 +144,7 @@ The generator must:
 
 **Inline Documentation**: Every injection includes:
 ```vhdl
--- CHAOS-MONKEY: cat1-violation3
+-- KAOS-BROWNIE: cat1-violation3
 -- VIOLATION: Unregistered CDC crossing
 -- SEVERITY: catastrophic
 -- ORIGINAL: [3 lines of original code]
@@ -153,7 +153,7 @@ The generator must:
 
 ### Generator Instructions (For LLM Implementation)
 
-When implementing the chaos monkey generator:
+When implementing the kaos brownie generator:
 
 1. **Parse Phase**:
    - Identify all signal declarations
@@ -195,21 +195,21 @@ When implementing the chaos monkey generator:
 ### Test Execution
 
 ```bash
-# Generate chaos variants
-python scripts/chaos-monkey.py \
+# Generate kaos variants
+python scripts/kaos-brownie.py \
   --source contrib/lzx/lumarian/enhanced.vhd \
-  --output contrib/lzx-chaos \
-  --manifest chaos-violations.json
+  --output contrib/lzx-kaos \
+  --manifest kaos-violations.json
 
 # Run analyzer on all variants
-stack exec spellcraft -- contrib/lzx-chaos/*.vhd \
-  --report chaos-detection-report.json
+stack exec spellcraft -- contrib/lzx-kaos/*.vhd \
+  --report kaos-detection-report.json
 
 # Compare detections vs manifest
-python scripts/chaos-compare.py \
-  --manifest contrib/lzx-chaos/chaos-violations.json \
-  --results chaos-detection-report.json \
-  --output chaos-test-results.md
+python scripts/kaos-compare.py \
+  --manifest contrib/lzx-kaos/kaos-violations.json \
+  --results kaos-detection-report.json \
+  --output kaos-test-results.md
 ```
 
 ## Preconditions

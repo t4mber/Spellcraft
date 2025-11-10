@@ -419,51 +419,56 @@ sourcePosToLocation pos = SourceLocation
 -- ADC-013 Process Body Parsing Implementation
 -- =============================================================================
 
+-- | Parse a single sequential statement
+-- Contract: spellcraft-adc-013 Section: Parser Extensions
+parseSequentialStatement :: Parser Statement
+parseSequentialStatement = do
+  sc  -- Consume leading whitespace
+  -- Try to parse different statement types
+  choice
+    [ try parseSignalAssignment
+    , try parseVariableAssignment
+    , try parseIfStatement
+    , try parseCaseStatement
+    , try parseLoopStatement
+    , try parseWaitStatement
+    , try parseNullStatement
+    ]
+
 -- | Parse sequential statements inside process
 -- Contract: spellcraft-adc-013 Section: Parser Extensions
 parseSequentialStatements :: Parser [Statement]
-parseSequentialStatements = trace "parseSequentialStatements called" $ do
-  -- Use manyTill with lookAhead to stop when we see "end"
-  stmts <- manyTill parseSequentialStatement (trace "checking for end" $ lookAhead $ keyword "end")
-  trace ("Parsed " ++ show (length stmts) ++ " statements") $ pure ()
-  trace ("Statement types: " ++ show (map stmtType stmts)) $ pure stmts
-  where
-    stmtType (SignalAssignment target _ _) = "SignalAssignment(" ++ show target ++ ")"
-    stmtType (VariableAssignment _ _ _) = "VariableAssignment"
-    stmtType (IfStatement _ _ _ _ _) = "IfStatement"
-    stmtType (CaseStatement _ _ _) = "CaseStatement"
-    stmtType (LoopStatement _ _ _ _) = "LoopStatement"
-    stmtType (WaitStatement _ _) = "WaitStatement"
-    stmtType (NullStatement _) = "NullStatement"
+parseSequentialStatements = do
+  -- Parse statements until we see "end process"
+  -- We need to check for "end" followed by "process" to avoid stopping at "end if", "end case", etc.
+  let go = do
+        -- Try to match "end process" with lookAhead
+        atEnd <- (lookAhead $ try $ do
+          keyword "end"
+          keyword "process"
+          pure True) <|> pure False
 
-    parseSequentialStatement = trace "parseSequentialStatement called" $ do
-      trace "trying choice" $ pure ()
-      -- Try to parse different statement types
-      result <- choice
-        [ trace "Trying parseSignalAssignment" $ try parseSignalAssignment
-        , trace "Trying parseVariableAssignment" $ try parseVariableAssignment
-        , trace "Trying parseIfStatement" $ try parseIfStatement
-        , trace "Trying parseCaseStatement" $ try parseCaseStatement
-        , trace "Trying parseLoopStatement" $ try parseLoopStatement
-        , trace "Trying parseWaitStatement" $ try parseWaitStatement
-        , trace "Trying parseNullStatement" $ try parseNullStatement
-        ]
-      trace ("parseSequentialStatement succeeded: " ++ show (stmtType result)) $ pure ()
-      pure result
+        if atEnd
+          then pure []
+          else do
+            stmtResult <- (Just <$> parseSequentialStatement) <|> pure Nothing
+            case stmtResult of
+              Nothing -> pure []
+              Just stmt -> do
+                rest <- go
+                pure (stmt : rest)
+
+  go
 
 -- | Parse signal assignment statement
 -- Contract: spellcraft-adc-013 Section: Parser Extensions
 parseSignalAssignment :: Parser Statement
 parseSignalAssignment = do
   pos <- getSourcePos
-  target <- trace "parseSignalAssignment: parsing target" identifier
-  trace ("parseSignalAssignment: got target " ++ show target) $ pure ()
+  target <- identifier
   void $ symbol "<="
-  trace "parseSignalAssignment: consumed <=" $ pure ()
   expr <- parseExpression
-  trace "parseSignalAssignment: got expression" $ pure ()
   void semi
-  trace "parseSignalAssignment: consumed semicolon" $ pure ()
   pure SignalAssignment
     { stmtTarget = target
     , stmtExpr = expr
@@ -493,18 +498,19 @@ parseIfStatement = do
   void $ keyword "if"
   condition <- parseExpression
   void $ keyword "then"
-  thenStmts <- manyTill parseSequentialStatement (lookAhead endOrElse)
+  -- Parse statements until we see elsif/else/end
+  thenStmts <- many (try (notFollowedBy endOrElse >> parseSequentialStatement))
   -- Parse elsif clauses
   elsifs <- many $ try $ do
     void $ keyword "elsif"
     cond <- parseExpression
     void $ keyword "then"
-    stmts <- manyTill parseSequentialStatement (lookAhead endOrElse)
+    stmts <- many (try (notFollowedBy endOrElse >> parseSequentialStatement))
     pure (cond, stmts)
   -- Parse optional else clause
   elseStmts <- option [] $ try $ do
     void $ keyword "else"
-    manyTill parseSequentialStatement (lookAhead $ keyword "end")
+    many (try (notFollowedBy (keyword "end") >> parseSequentialStatement))
   void $ keyword "end"
   void $ keyword "if"
   void semi
@@ -517,15 +523,6 @@ parseIfStatement = do
     }
   where
     endOrElse = choice [keyword "elsif", keyword "else", keyword "end"]
-    parseSequentialStatement = choice
-      [ try parseSignalAssignment
-      , try parseVariableAssignment
-      , try parseIfStatement  -- Nested if statements
-      , try parseCaseStatement
-      , try parseLoopStatement
-      , try parseWaitStatement
-      , try parseNullStatement
-      ]
 
 -- | Parse case statement
 -- Contract: spellcraft-adc-013 Section: Parser Extensions
@@ -535,7 +532,7 @@ parseCaseStatement = do
   void $ keyword "case"
   expr <- parseExpression
   void $ keyword "is"
-  whenClauses <- manyTill parseWhenClause (lookAhead $ keyword "end")
+  whenClauses <- many (try parseWhenClause)
   void $ keyword "end"
   void $ keyword "case"
   void semi
@@ -549,18 +546,9 @@ parseCaseStatement = do
       void $ keyword "when"
       choice <- parseExpression <|> (keyword "others" >> pure (IdentifierExpr "others"))
       void $ symbol "=>"
-      stmts <- manyTill parseSequentialStatement (lookAhead nextWhenOrEnd)
+      stmts <- many (try (notFollowedBy nextWhenOrEnd >> parseSequentialStatement))
       pure (choice, stmts)
     nextWhenOrEnd = choice [keyword "when", keyword "end"]
-    parseSequentialStatement = choice
-      [ try parseSignalAssignment
-      , try parseVariableAssignment
-      , try parseIfStatement
-      , try parseCaseStatement
-      , try parseLoopStatement
-      , try parseWaitStatement
-      , try parseNullStatement
-      ]
 
 -- | Parse loop statement
 -- Contract: spellcraft-adc-013 Section: Parser Extensions
@@ -585,7 +573,7 @@ parseLoopStatement = do
       pure Nothing
   -- If we have a for loop, consume the "loop" keyword
   when (isJust loopVar) $ void $ keyword "loop"
-  body <- manyTill parseSequentialStatement (lookAhead $ keyword "end")
+  body <- many (try (notFollowedBy (keyword "end") >> parseSequentialStatement))
   void $ keyword "end"
   void $ keyword "loop"
   void semi
@@ -595,16 +583,6 @@ parseLoopStatement = do
     , stmtLoopBody = body
     , stmtLocation = sourcePosToLocation pos
     }
-  where
-    parseSequentialStatement = choice
-      [ try parseSignalAssignment
-      , try parseVariableAssignment
-      , try parseIfStatement
-      , try parseCaseStatement
-      , try parseLoopStatement
-      , try parseWaitStatement
-      , try parseNullStatement
-      ]
 
 -- | Parse wait statement
 -- Contract: spellcraft-adc-013 Section: Parser Extensions

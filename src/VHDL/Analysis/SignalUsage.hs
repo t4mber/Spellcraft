@@ -16,6 +16,7 @@ import qualified Data.Map.Strict as Map
 import Data.Set (Set)
 import qualified Data.Set as Set
 import Data.Text (Text)
+import Debug.Trace (trace)
 import VHDL.AST
 import VHDL.SourceLocation (SourceLocation)
 
@@ -94,13 +95,16 @@ collectSignalDecls arch =
 -- Contract: spellcraft-adc-012 Section: Signal Usage Tracker
 collectSignalAssignments :: Architecture -> Map Identifier [SourceLocation]
 collectSignalAssignments arch =
+  trace ("collectSignalAssignments: architecture has " ++ show (length $ archStatements arch) ++ " statements") $
   let stmtAssignments = concatMap collectFromArchStatement (archStatements arch)
-  in Map.fromListWith (++) stmtAssignments
+      result = Map.fromListWith (++) stmtAssignments
+  in trace ("collectSignalAssignments: found " ++ show (Map.size result) ++ " assigned signals: " ++ show (Map.keys result)) result
 
 -- | Collect assignments from an architecture statement
 collectFromArchStatement :: ArchStatement -> [(Identifier, [SourceLocation])]
 collectFromArchStatement (ProcessStmt _ _ stmts loc) =
   -- Collect assignments from process statements
+  trace ("collectFromArchStatement (ProcessStmt): found " ++ show (length stmts) ++ " statements") $
   concatMap collectFromSeqStatement stmts
 collectFromArchStatement (ConcurrentAssignment target _ loc) =
   [(target, [loc])]

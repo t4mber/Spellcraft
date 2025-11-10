@@ -72,6 +72,10 @@ reservedKeywords =
   [ "entity", "architecture", "component", "port", "generic"
   , "map", "is", "of", "begin", "end", "signal", "in", "out", "inout"
   , "to", "downto"
+  , "if", "then", "elsif", "else"
+  , "case", "when", "others"
+  , "loop", "for", "while"
+  , "process", "wait", "null"
   ]
 
 -- | Parse an integer literal (supporting negative numbers)

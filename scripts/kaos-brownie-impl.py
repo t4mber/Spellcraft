@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Chaos Monkey VHDL Violation Injector - Initial Implementation
+Kaos Brownie VHDL Violation Injector - Initial Implementation
 Contract: spellcraft-adc-011
 
 This is a working implementation that generates a subset of violations
@@ -15,7 +15,7 @@ from pathlib import Path
 from datetime import datetime
 from typing import List, Dict, Tuple
 
-class VHDLChaosMonkey:
+class VHDLKaosBrownie:
     def __init__(self, source_path: str, output_dir: str):
         self.source_path = Path(source_path)
         self.output_dir = Path(output_dir)
@@ -55,7 +55,7 @@ class VHDLChaosMonkey:
                 original_line = line
                 # Add violation marker
                 violation_marker = [
-                    "  -- CHAOS-MONKEY: cat1-violation1",
+                    "  -- KAOS-BROWNIE: cat1-violation1",
                     "  -- VIOLATION: Unregistered CDC crossing",
                     "  -- SEVERITY: catastrophic",
                     f"  -- ORIGINAL: {line.strip()}",
@@ -98,11 +98,11 @@ class VHDLChaosMonkey:
             if 'begin' in line.lower() and 'architecture' not in line.lower():
                 # Insert an undriven signal just before 'begin'
                 violation_marker = [
-                    "  -- CHAOS-MONKEY: cat3-violation1",
+                    "  -- KAOS-BROWNIE: cat3-violation1",
                     "  -- VIOLATION: Undriven signal",
                     "  -- SEVERITY: subtle",
                     "  -- INJECTED: Signal declared but never assigned",
-                    "  signal s_chaos_undriven : std_logic; -- This signal is never driven!"
+                    "  signal s_kaos_undriven : std_logic; -- This signal is never driven!"
                 ]
 
                 lines.insert(i, '\n'.join(violation_marker))
@@ -148,7 +148,7 @@ class VHDLChaosMonkey:
                 )
 
                 violation_marker = [
-                    "  -- CHAOS-MONKEY: cat7-violation1",
+                    "  -- KAOS-BROWNIE: cat7-violation1",
                     "  -- VIOLATION: Off-by-one error",
                     "  -- SEVERITY: subtle",
                     f"  -- ORIGINAL: {original_line.strip()}",
@@ -193,7 +193,7 @@ class VHDLChaosMonkey:
 
         # Update entity name to include violation ID
         if self.entity_name:
-            new_entity = f"{self.entity_name}_chaos_{violation_id.replace('-', '_')}"
+            new_entity = f"{self.entity_name}_kaos_{violation_id.replace('-', '_')}"
             corrupted_content = corrupted_content.replace(
                 f"entity {self.entity_name}",
                 f"entity {new_entity}"
@@ -222,7 +222,7 @@ class VHDLChaosMonkey:
         return True
 
     def generate_manifest(self) -> None:
-        """Generate the chaos-violations.json manifest"""
+        """Generate the kaos-violations.json manifest"""
         manifest = {
             "source": str(self.source_path),
             "generated_at": datetime.utcnow().isoformat() + 'Z',
@@ -231,15 +231,15 @@ class VHDLChaosMonkey:
             "violations": self.violations
         }
 
-        manifest_path = self.output_dir / 'chaos-violations.json'
+        manifest_path = self.output_dir / 'kaos-violations.json'
         with open(manifest_path, 'w') as f:
             json.dump(manifest, f, indent=2)
 
         print(f"\n✓ Generated manifest: {manifest_path}")
 
     def generate_readme(self) -> None:
-        """Generate README.md for the chaos corpus"""
-        readme_content = f"""# Chaos Monkey VHDL Test Corpus
+        """Generate README.md for the kaos corpus"""
+        readme_content = f"""# Kaos Brownie VHDL Test Corpus
 
 **Contract**: spellcraft-adc-011
 **Generated**: {datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S')} UTC
@@ -280,12 +280,12 @@ for testing the Spellcraft analyzer's detection capabilities.
 Run the analyzer on all variants:
 
 ```bash
-stack exec spellcraft -- contrib/lzx-chaos/*.vhd --report chaos-detection-report.json
+stack exec spellcraft -- contrib/lzx-kaos/*.vhd --report kaos-detection-report.json
 ```
 
 ## Expected Results
 
-See `chaos-violations.json` for expected detection results. Each violation includes:
+See `kaos-violations.json` for expected detection results. Each violation includes:
 - `should_detect`: Whether the analyzer should catch this violation
 - `detection_method`: Which analyzer component should detect it
 - `currently_implemented`: Whether detection is implemented yet
@@ -295,10 +295,10 @@ See `chaos-violations.json` for expected detection results. Each violation inclu
 Compare actual detections against manifest:
 
 ```bash
-python scripts/chaos-compare.py \\
-  --manifest contrib/lzx-chaos/chaos-violations.json \\
-  --results chaos-detection-report.json \\
-  --output chaos-test-results.md
+python scripts/kaos-compare.py \\
+  --manifest contrib/lzx-kaos/kaos-violations.json \\
+  --results kaos-detection-report.json \\
+  --output kaos-test-results.md
 ```
 """
 
@@ -346,7 +346,7 @@ python scripts/chaos-compare.py \\
 
 def main():
     parser = argparse.ArgumentParser(
-        description='Generate VHDL chaos monkey test variants (POC implementation)'
+        description='Generate VHDL kaos brownie test variants (POC implementation)'
     )
     parser.add_argument(
         '--source',
@@ -355,22 +355,22 @@ def main():
     )
     parser.add_argument(
         '--output',
-        default='contrib/lzx-chaos',
-        help='Output directory for chaos variants (default: contrib/lzx-chaos)'
+        default='contrib/lzx-kaos',
+        help='Output directory for kaos variants (default: contrib/lzx-kaos)'
     )
 
     args = parser.parse_args()
 
     print("""
 ╔═══════════════════════════════════════════════════════════════╗
-║          CHAOS MONKEY VHDL VIOLATION INJECTOR                 ║
+║          KAOS BROWNIE VHDL VIOLATION INJECTOR                 ║
 ║          Proof of Concept Implementation                      ║
 ║                 Contract: spellcraft-adc-011                  ║
 ╚═══════════════════════════════════════════════════════════════╝
 """)
 
-    monkey = VHDLChaosMonkey(args.source, args.output)
-    monkey.generate()
+    brownie = VHDLKaosBrownie(args.source, args.output)
+    brownie.generate()
 
     return 0
 

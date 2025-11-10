@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Chaos Monkey with Subtlety Levels
+Kaos Brownie with Subtlety Levels
 Contract: spellcraft-adc-011 (Enhanced)
 
 Generates VHDL violations at different subtlety levels to test
@@ -14,10 +14,10 @@ Subtlety Levels:
 - Level 5 (Extremely Subtle): Edge cases that require deep understanding
 
 Usage:
-    python scripts/chaos-monkey-subtlety.py \\
+    python scripts/kaos-brownie-subtlety.py \\
         --source contrib/lzx/lumarian/enhance.vhd \\
         --subtlety 1-5 \\
-        --output contrib/lzx-chaos-levels
+        --output contrib/lzx-kaos-levels
 """
 
 import argparse
@@ -28,7 +28,7 @@ from pathlib import Path
 from datetime import datetime
 from typing import List, Dict, Tuple
 
-class SubtleChaosMonkey:
+class SubtleKaosBrownie:
     def __init__(self, source_path: str, output_dir: str, subtlety: int):
         self.source_path = Path(source_path)
         self.output_dir = Path(output_dir)
@@ -66,7 +66,7 @@ class SubtleChaosMonkey:
         for i, line in enumerate(lines):
             if 'begin' in line.lower() and 'architecture' not in line.lower():
                 marker = [
-                    "  -- CHAOS-MONKEY: level1-undriven",
+                    "  -- KAOS-BROWNIE: level1-undriven",
                     "  -- SUBTLETY: 1 (Obvious)",
                     "  -- VIOLATION: Signal declared but completely undriven",
                     "  signal THIS_SIGNAL_IS_NEVER_USED : std_logic; -- OBVIOUS BUG!"
@@ -100,7 +100,7 @@ class SubtleChaosMonkey:
         for i, line in enumerate(lines):
             if 'begin' in line.lower() and i > 20:
                 marker = [
-                    "  -- CHAOS-MONKEY: level2-partial",
+                    "  -- KAOS-BROWNIE: level2-partial",
                     "  -- SUBTLETY: 2 (Moderate)",
                     "  -- VIOLATION: Signal assigned in some paths, not others",
                     "  signal s_sometimes_driven : std_logic;"
@@ -144,7 +144,7 @@ class SubtleChaosMonkey:
             if 'signal' in line and 'downto 0' in line and 'WIDTH - 1' in line:
                 # Add a signal that will grow without protection
                 marker = [
-                    "  -- CHAOS-MONKEY: level3-bitgrowth",
+                    "  -- KAOS-BROWNIE: level3-bitgrowth",
                     "  -- SUBTLETY: 3 (Subtle)",
                     "  -- VIOLATION: Arithmetic operation without overflow protection",
                     "  signal s_accumulator : unsigned(G_WIDTH - 1 downto 0); -- Will overflow!"
@@ -184,7 +184,7 @@ class SubtleChaosMonkey:
         for i, line in enumerate(lines):
             if 'signal' in line and 's_valid' in line:
                 marker = [
-                    "  -- CHAOS-MONKEY: level4-timing",
+                    "  -- KAOS-BROWNIE: level4-timing",
                     "  -- SUBTLETY: 4 (Very Subtle)",
                     "  -- VIOLATION: Timing assumption - valid flag not synchronized properly",
                     "  signal s_cross_domain_valid : std_logic; -- Crosses from different clock!"
@@ -226,7 +226,7 @@ class SubtleChaosMonkey:
         for i, line in enumerate(lines):
             if 'begin' in line.lower() and i > 20:
                 marker = [
-                    "  -- CHAOS-MONKEY: level5-race",
+                    "  -- KAOS-BROWNIE: level5-race",
                     "  -- SUBTLETY: 5 (Extremely Subtle)",
                     "  -- VIOLATION: Race condition in signal update order",
                     "  signal s_data_stage1 : unsigned(G_WIDTH - 1 downto 0);",
@@ -274,7 +274,7 @@ class SubtleChaosMonkey:
 
         # Update entity name
         if self.entity_name:
-            new_entity = f"{self.entity_name}_chaos_{violation_id.replace('-', '_')}"
+            new_entity = f"{self.entity_name}_kaos_{violation_id.replace('-', '_')}"
             corrupted_content = corrupted_content.replace(
                 f"entity {self.entity_name}",
                 f"entity {new_entity}"
@@ -314,7 +314,7 @@ class SubtleChaosMonkey:
             "violations": self.violations
         }
 
-        manifest_path = self.output_dir / f'chaos-violations-level{self.subtlety}.json'
+        manifest_path = self.output_dir / f'kaos-violations-level{self.subtlety}.json'
         with open(manifest_path, 'w') as f:
             json.dump(manifest, f, indent=2)
 
@@ -360,20 +360,20 @@ def main():
     parser.add_argument('--source', required=True, help='Source VHDL file')
     parser.add_argument('--subtlety', type=int, default=5, choices=range(1,6),
                        help='Maximum subtlety level (1-5)')
-    parser.add_argument('--output', default='contrib/lzx-chaos-levels',
+    parser.add_argument('--output', default='contrib/lzx-kaos-levels',
                        help='Output directory')
 
     args = parser.parse_args()
 
     print("""
 ╔═══════════════════════════════════════════════════════════════╗
-║     CHAOS MONKEY - SUBTLETY LEVEL EVALUATION                  ║
+║     KAOS BROWNIE - SUBTLETY LEVEL EVALUATION                  ║
 ║            Contract: spellcraft-adc-011                       ║
 ╚═══════════════════════════════════════════════════════════════╝
 """)
 
-    monkey = SubtleChaosMonkey(args.source, args.output, args.subtlety)
-    monkey.generate()
+    brownie = SubtleKaosBrownie(args.source, args.output, args.subtlety)
+    brownie.generate()
 
     return 0
 

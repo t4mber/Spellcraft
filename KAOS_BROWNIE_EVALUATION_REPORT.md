@@ -1,4 +1,4 @@
-# Chaos Monkey Subtlety Evaluation Report
+# Kaos Brownie Subtlety Evaluation Report
 
 **Contract**: spellcraft-adc-011
 **Date**: 2025-11-09
@@ -30,7 +30,7 @@ Source: `contrib/lzx/lumarian/enhance.vhd`
 
 Generated 4 violation variants:
 ```
-contrib/lzx-chaos-levels/
+contrib/lzx-kaos-levels/
 ├── enhance-level1-undriven.vhd     (Subtlety 1)
 ├── enhance-level2-partial.vhd      (Subtlety 2)
 ├── enhance-level3-bitgrowth.vhd    (Subtlety 3)
@@ -294,17 +294,17 @@ Violations: []
 To reproduce these results:
 
 ```bash
-# Generate chaos variants
-python3 scripts/chaos-monkey-subtlety.py \\
+# Generate kaos variants
+python3 scripts/kaos-brownie-subtlety.py \\
   --source contrib/lzx/lumarian/enhance.vhd \\
   --subtlety 5 \\
-  --output contrib/lzx-chaos-levels
+  --output contrib/lzx-kaos-levels
 
 # Run Spellcraft analyzer
-stack exec spellcraft -- contrib/lzx-chaos-levels/*.vhd
+stack exec spellcraft -- contrib/lzx-kaos-levels/*.vhd
 
 # Check manifest
-cat contrib/lzx-chaos-levels/chaos-violations-level5.json
+cat contrib/lzx-kaos-levels/chaos-violations-level5.json
 ```
 
 ### Expected vs Actual
@@ -327,7 +327,7 @@ The Spellcraft VHDL analyzer currently excels at parsing and basic structural an
 
 ### Success Criteria
 
-The chaos monkey framework has successfully:
+The kaos brownie framework has successfully:
 - Created reproducible test methodology
 - Documented expected detection capabilities
 - Identified implementation priorities
@@ -339,15 +339,15 @@ When detection features are implemented, re-run this evaluation to measure progr
 
 ```bash
 # Track detection rate over time
-python3 scripts/chaos-compare.py \\
-  --manifest contrib/lzx-chaos-levels/chaos-violations-level5.json \\
-  --results chaos-detection-report.json \\
-  --baseline CHAOS_MONKEY_EVALUATION_REPORT.md
+python3 scripts/kaos-compare.py \\
+  --manifest contrib/lzx-kaos-levels/chaos-violations-level5.json \\
+  --results kaos-detection-report.json \\
+  --baseline KAOS_BROWNIE_EVALUATION_REPORT.md
 ```
 
 ---
 
 **Report Generated**: 2025-11-09
-**Framework**: Chaos Monkey (spellcraft-adc-011)
+**Framework**: Kaos Brownie (spellcraft-adc-011)
 **Status**: Detection features await implementation
 **Next Review**: After violation detection implementation
