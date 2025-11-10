@@ -74,13 +74,13 @@ reservedKeywords =
   , "to", "downto"
   ]
 
--- | Parse an integer literal
+-- | Parse an integer literal (supporting negative numbers)
 integer :: Parser Integer
-integer = lexeme L.decimal
+integer = lexeme (L.signed sc L.decimal)
 
--- | Parse a floating-point literal
+-- | Parse a floating-point literal (supporting negative numbers)
 double :: Parser Double
-double = lexeme L.float
+double = lexeme (L.signed sc L.float)
 
 -- | Parse a string literal
 stringLiteral :: Parser Text
