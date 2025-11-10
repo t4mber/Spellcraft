@@ -1,0 +1,901 @@
+---
+contract_id: spellcraft-adc-010
+title: "Videomancer: Comprehensive LZX Video Hardware Analysis with Parameter Validation"
+author: "Spellcraft Team"
+status: "proposed"
+version: 1.0
+created_date: "2025-11-09"
+last_updated: "2025-11-09"
+dependencies: ["spellcraft-adc-009", "spellcraft-adc-006"]
+---
+
+## [Rationale: Videomancer Feature] <videomancer-rationale-01>
+
+The LZX analysis report shows that Spellcraft v0.3.0 successfully parsed only 26% (6/23) of VHDL files in the contrib/lzx directory. Additionally, the LZX modules (Lumarian and Mirrorbound) include JSON parameter configuration files that define hardware control parameter ranges, but there is no validation that these parameter ranges are sound or consistent with the VHDL implementation.
+
+**Business Impact:**
+1. **100% Analysis Coverage**: Enable complete static analysis of all LZX VHDL designs
+2. **Parameter Safety**: Validate that JSON parameter configs match hardware constraints
+3. **Video Synthesis QA**: Ensure LZX video synthesis modules meet safety and correctness standards
+4. **Market Differentiation**: First VHDL analyzer with integrated parameter validation for video hardware
+
+**Current Gaps:**
+- 17/23 VHDL files fail to parse (work library issues, generic constructs)
+- No validation of JSON parameter ranges against VHDL generic constraints
+- No --videomancer CLI flag for specialized video hardware analysis
+- No integration between runtime VHDL analysis and compile-time Clash analysis
+
+## [Feature: Videomancer Analysis Mode] <videomancer-feature-01>
+
+**Description:**
+A specialized analysis mode for video synthesis hardware that combines:
+1. Enhanced VHDL parser supporting work libraries and complex generics
+2. JSON parameter configuration validator
+3. Cross-validation between JSON configs and VHDL generic constraints
+4. Compile-time Clash type-level analysis for frequency safety
+5. Comprehensive reporting for video hardware modules
+
+**CLI Interface:**
+```bash
+# Analyze all LZX modules with parameter validation
+spellcraft --videomancer contrib/lzx/**/*.vhd
+
+# Analyze specific module with its JSON config
+spellcraft --videomancer contrib/lzx/lumarian/*.vhd --config contrib/lzx/lumarian/lumarian.json
+
+# Generate comprehensive video hardware report
+spellcraft --videomancer contrib/lzx --report lzx-videomancer-report.md
+```
+
+**Configuration:**
+- **`--videomancer`**: Enable video hardware analysis mode
+- **`--config <path>`**: Path to JSON parameter configuration file
+- **`--report <path>`**: Generate detailed analysis report
+- **`--strict`**: Fail on any parameter range inconsistency
+
+**Parity:**
+- **Implementation Scope:** `src/VHDL/CLI/Videomancer.hs`
+- **Configuration Scope:** `src/VHDL/Videomancer/`
+- **Tests:**
+  - `test/VHDL/Videomancer/ParserSpec.hs`
+  - `test/VHDL/Videomancer/ParameterSpec.hs`
+  - `test/VHDL/Videomancer/IntegrationSpec.hs`
+
+## [DataModel: VideomancerConfig] <videomancer-config-01>
+
+**Purpose:** Parse and represent JSON parameter configuration files for video synthesis hardware.
+
+```haskell
+{-# LANGUAGE DeriveGeneric #-}
+{-# LANGUAGE OverloadedStrings #-}
+
+data ParameterType
+  = RangeParameter
+  | BooleanParameter
+  deriving (Show, Eq, Generic)
+
+instance FromJSON ParameterType where
+  parseJSON = withText "ParameterType" $ \case
+    "RANGE" -> pure RangeParameter
+    "BOOLEAN" -> pure BooleanParameter
+    other -> fail $ "Unknown parameter type: " <> unpack other
+
+data ParameterConfig = ParameterConfig
+  { paramRef :: Text              -- "P1", "P2", etc.
+  , paramName :: Text             -- "Contrast", "Brightness", etc.
+  , paramType :: ParameterType
+  , paramFloatPrecision :: Maybe Int
+  , paramMin :: Maybe Double      -- For RANGE type
+  , paramMax :: Maybe Double      -- For RANGE type
+  , paramSuffix :: Maybe Text     -- "%", "", etc.
+  , paramLabels :: Maybe [Text]   -- For BOOLEAN type
+  } deriving (Show, Eq, Generic)
+
+instance FromJSON ParameterConfig where
+  parseJSON = withObject "ParameterConfig" $ \v -> ParameterConfig
+    <$> v .: "ref"
+    <*> v .: "name"
+    <*> v .: "type"
+    <*> v .:? "float_precision"
+    <*> v .:? "min"
+    <*> v .:? "max"
+    <*> v .:? "suffix"
+    <*> v .:? "labels"
+
+data ProgramConfig = ProgramConfig
+  { progName :: Text
+  , progVersion :: Text
+  , progParameters :: [ParameterConfig]
+  } deriving (Show, Eq, Generic)
+
+instance FromJSON ProgramConfig where
+  parseJSON = withObject "ProgramConfig" $ \v -> do
+    config <- v .: "program_config"
+    ProgramConfig
+      <$> config .: "name"
+      <*> config .: "version"
+      <*> config .: "parameter_configs"
+
+data VideomancerConfig = VideomancerConfig
+  { vcProgramConfig :: ProgramConfig
+  , vcVhdlFiles :: [FilePath]
+  , vcAnalysisMode :: AnalysisMode
+  } deriving (Show, Eq, Generic)
+```
+
+**Validation Rules:**
+- RANGE parameters MUST have min and max values
+- BOOLEAN parameters MUST have exactly 2 labels
+- Parameter refs MUST be unique within a config
+- float_precision MUST be >= 0 if present
+- min MUST be < max for RANGE parameters
+
+**Parity:**
+- **Implementation Scope:** `src/VHDL/Videomancer/Config.hs`
+- **Tests:** `test/VHDL/Videomancer/ConfigSpec.hs`
+
+## [DataModel: ParameterConstraint] <parameter-constraint-01>
+
+**Purpose:** Represent hardware constraints extracted from VHDL generics that correspond to JSON parameters.
+
+```haskell
+data ConstraintSource
+  = FromGeneric Text SourceLocation  -- From VHDL generic declaration
+  | FromComment Text SourceLocation  -- From VHDL comment annotation
+  | Inferred SourceLocation           -- Inferred from signal widths
+  deriving (Show, Eq, Generic)
+
+data ParameterConstraint = ParameterConstraint
+  { pcName :: Text                    -- Parameter name from VHDL
+  , pcSource :: ConstraintSource
+  , pcMinValue :: Maybe Double
+  , pcMaxValue :: Maybe Double
+  , pcDataType :: VHDLType           -- From VHDL.AST
+  , pcBitWidth :: Maybe Int          -- Signal bit width
+  } deriving (Show, Eq, Generic)
+
+data ConstraintViolation = ConstraintViolation
+  { cvParameter :: Text
+  , cvExpected :: ParameterConstraint
+  , cvActual :: ParameterConfig
+  , cvViolationType :: ViolationType
+  , cvSeverity :: Severity
+  } deriving (Show, Eq, Generic)
+
+data ViolationType
+  = MinValueMismatch
+  | MaxValueMismatch
+  | TypeMismatch
+  | MissingParameter
+  | ExtraParameter
+  deriving (Show, Eq, Generic)
+
+data Severity = Error | Warning | Info
+  deriving (Show, Eq, Ord, Generic)
+```
+
+**Parity:**
+- **Implementation Scope:** `src/VHDL/Videomancer/Constraint.hs`
+- **Tests:** `test/VHDL/Videomancer/ConstraintSpec.hs`
+
+## [Algorithm: Parameter Soundness Validation] <parameter-validation-algo-01>
+
+**Purpose:** Validate that JSON parameter configurations are sound with respect to VHDL hardware constraints.
+
+**Input:**
+- `ProgramConfig`: Parsed JSON parameter configuration
+- `[VHDLDesign]`: Parsed VHDL designs from source files
+- `ValidationMode`: Strict | Permissive
+
+**Output:**
+- `Either [ConstraintViolation] ValidationReport`
+
+**Algorithm:**
+
+```haskell
+validateParameterSoundness :: ProgramConfig
+                            -> [VHDLDesign]
+                            -> ValidationMode
+                            -> Either [ConstraintViolation] ValidationReport
+validateParameterSoundness config designs mode = do
+  -- Step 1: Extract parameter constraints from VHDL generics
+  let constraints = extractConstraintsFromVHDL designs
+
+  -- Step 2: Build parameter mapping
+  let paramMap = buildParameterMapping (progParameters config) constraints
+
+  -- Step 3: Validate each parameter
+  let violations = concatMap (validateParameter mode) paramMap
+
+  -- Step 4: Check for missing/extra parameters
+  let completeness = checkCompleteness (progParameters config) constraints
+
+  -- Step 5: Generate report or return violations
+  if null violations && null completeness
+    then Right $ ValidationReport
+      { vrStatus = Valid
+      , vrParametersChecked = length (progParameters config)
+      , vrConstraintsFound = length constraints
+      , vrViolations = []
+      }
+    else Left (violations <> completeness)
+
+-- Extract constraints from VHDL generic declarations
+extractConstraintsFromVHDL :: [VHDLDesign] -> [ParameterConstraint]
+extractConstraintsFromVHDL designs =
+  concatMap extractFromEntity designs
+  where
+    extractFromEntity design =
+      case designEntity design of
+        Entity _ generics _ _ -> parseGenerics generics
+
+-- Validate individual parameter against constraint
+validateParameter :: ValidationMode
+                  -> (ParameterConfig, Maybe ParameterConstraint)
+                  -> [ConstraintViolation]
+validateParameter mode (param, maybeConstraint) =
+  case maybeConstraint of
+    Nothing -> if mode == Strict
+               then [ConstraintViolation
+                      { cvParameter = paramName param
+                      , cvExpected = undefined
+                      , cvActual = param
+                      , cvViolationType = MissingParameter
+                      , cvSeverity = Warning
+                      }]
+               else []
+    Just constraint -> validateAgainstConstraint param constraint
+
+validateAgainstConstraint :: ParameterConfig
+                          -> ParameterConstraint
+                          -> [ConstraintViolation]
+validateAgainstConstraint param constraint =
+  catMaybes
+    [ checkMinValue param constraint
+    , checkMaxValue param constraint
+    , checkTypeCompatibility param constraint
+    ]
+```
+
+**Parity:**
+- **Implementation Scope:** `src/VHDL/Videomancer/Validation.hs`
+- **Tests:** `test/VHDL/Videomancer/ValidationSpec.hs`
+
+## [Implementation: Enhanced VHDL Parser] <vhdl-parser-enhancement-01>
+
+**Purpose:** Extend the VHDL parser to support work libraries, multiple design units, and complex generics - achieving 90%+ parse success rate on LZX corpus.
+
+**Dependencies:**
+- Extends `spellcraft-adc-009` (VHDL Parser Enhancement)
+- Integrates with `spellcraft-adc-001` (VHDL Parser)
+
+**Key Enhancements:**
+
+1. **Work Library Support:**
+```haskell
+-- ADC-IMPLEMENTS: <vhdl-parser-enhancement-01>
+parseLibraryDeclaration :: Parser LibraryDeclaration
+parseLibraryDeclaration = do
+  _ <- keyword "library"
+  name <- identifier
+  _ <- symbol ";"
+  loc <- getSourcePos
+  pure $ LibraryDeclaration name (toSourceLocation loc)
+
+parseUseClause :: Parser UseClause
+parseUseClause = do
+  _ <- keyword "use"
+  lib <- identifier
+  _ <- symbol "."
+  pkg <- identifier  -- Can be "all" or specific package
+  _ <- symbol ";"
+  loc <- getSourcePos
+  pure $ UseClause lib pkg (toSourceLocation loc)
+```
+
+2. **Multiple Design Units:**
+```haskell
+-- ADC-IMPLEMENTS: <vhdl-parser-enhancement-01>
+parseVHDLFile :: Parser [VHDLDesign]
+parseVHDLFile = do
+  libs <- many parseLibraryDeclaration
+  uses <- many parseUseClause
+  designs <- some parseDesignUnit
+  pure $ map (addLibrariesAndUses libs uses) designs
+```
+
+3. **Complex Generic Support:**
+```haskell
+-- ADC-IMPLEMENTS: <vhdl-parser-enhancement-01>
+parseGenericClause :: Parser [GenericDeclaration]
+parseGenericClause = do
+  _ <- keyword "generic"
+  _ <- symbol "("
+  generics <- parseGenericDeclaration `sepBy1` symbol ";"
+  _ <- symbol ")"
+  _ <- symbol ";"
+  pure generics
+
+parseGenericDeclaration :: Parser GenericDeclaration
+parseGenericDeclaration = do
+  names <- identifier `sepBy1` symbol ","
+  _ <- symbol ":"
+  gtype <- parseType
+  defaultVal <- optional (symbol ":=" *> parseExpression)
+  loc <- getSourcePos
+  pure $ GenericDeclaration names gtype defaultVal (toSourceLocation loc)
+```
+
+**Parity:**
+- **Implementation Scope:** `src/VHDL/Parser.hs` (enhanced)
+- **Tests:**
+  - `test/VHDL/Parser/WorkLibrarySpec.hs`
+  - `test/VHDL/Parser/LZXCompatibilitySpec.hs`
+
+## [Tool: Videomancer CLI] <videomancer-cli-01>
+
+**Purpose:** Command-line interface for video hardware analysis with parameter validation.
+
+**Interface:**
+
+```haskell
+-- ADC-IMPLEMENTS: <videomancer-cli-01>
+data VideomancerOptions = VideomancerOptions
+  { voInputFiles :: [FilePath]       -- VHDL files to analyze
+  , voConfigFile :: Maybe FilePath   -- JSON parameter config
+  , voReportPath :: Maybe FilePath   -- Output report path
+  , voStrictMode :: Bool             -- Fail on any violation
+  , voVerbose :: Bool                -- Verbose output
+  } deriving (Show, Eq, Generic)
+
+runVideomancer :: VideomancerOptions -> IO ExitCode
+runVideomancer opts = do
+  -- Parse VHDL files
+  designs <- parseVHDLFiles (voInputFiles opts)
+
+  -- Load parameter config if provided
+  maybeConfig <- traverse loadProgramConfig (voConfigFile opts)
+
+  -- Run analysis
+  result <- analyzeVideoHardware designs maybeConfig
+
+  -- Validate parameters if config provided
+  validation <- case maybeConfig of
+    Nothing -> pure $ Right ValidationReport
+      { vrStatus = Skipped
+      , vrParametersChecked = 0
+      , vrConstraintsFound = 0
+      , vrViolations = []
+      }
+    Just config -> pure $ validateParameterSoundness
+                            config designs
+                            (if voStrictMode opts then Strict else Permissive)
+
+  -- Generate report
+  report <- generateVideomancerReport designs result validation
+
+  -- Output report
+  case voReportPath opts of
+    Nothing -> TIO.putStrLn (renderReport report)
+    Just path -> TIO.writeFile path (renderReport report)
+
+  -- Determine exit code
+  case validation of
+    Left violations | voStrictMode opts -> pure $ ExitFailure 1
+    _ -> pure ExitSuccess
+```
+
+**CLI Options:**
+
+```bash
+spellcraft --videomancer [OPTIONS] <VHDL_FILES>...
+
+OPTIONS:
+  --config <PATH>      JSON parameter configuration file
+  --report <PATH>      Output report file path (default: stdout)
+  --strict             Fail on any parameter validation violation
+  --verbose            Verbose analysis output
+  --help               Show this help message
+```
+
+**Parity:**
+- **Implementation Scope:** `src/VHDL/CLI/Videomancer.hs`
+- **Tests:** `test/VHDL/CLI/VideomancerSpec.hs`
+
+## [DataTransform: VideomancerReport Generation] <videomancer-report-01>
+
+**Input:**
+- `[VHDLDesign]`: Parsed designs
+- `AnalysisResult`: Frequency and constraint analysis
+- `Either [ConstraintViolation] ValidationReport`: Parameter validation result
+
+**Output:**
+- `VideomancerReport`: Comprehensive markdown report
+
+**Transform Logic:**
+
+```haskell
+-- ADC-IMPLEMENTS: <videomancer-report-01>
+generateVideomancerReport :: [VHDLDesign]
+                          -> AnalysisResult
+                          -> Either [ConstraintViolation] ValidationReport
+                          -> IO VideomancerReport
+generateVideomancerReport designs analysis validation = do
+  timestamp <- getCurrentTime
+
+  pure $ VideomancerReport
+    { vrTimestamp = timestamp
+    , vrSummary = generateSummary designs analysis validation
+    , vrParseResults = summarizeParseResults designs
+    , vrFrequencyAnalysis = analysis
+    , vrParameterValidation = validation
+    , vrRecommendations = generateRecommendations designs validation
+    }
+
+generateSummary :: [VHDLDesign]
+                -> AnalysisResult
+                -> Either [ConstraintViolation] ValidationReport
+                -> ReportSummary
+generateSummary designs analysis validation =
+  ReportSummary
+    { rsFilesAnalyzed = length designs
+    , rsParseSuccessRate = calculateSuccessRate designs
+    , rsFrequencyViolations = length (arViolations analysis)
+    , rsParameterViolations = case validation of
+        Left violations -> length violations
+        Right report -> length (vrViolations report)
+    , rsOverallStatus = determineOverallStatus designs analysis validation
+    }
+```
+
+**Report Format:**
+
+```markdown
+# Videomancer Analysis Report
+
+**Generated:** 2025-11-09 12:00:00
+**Tool:** Spellcraft v0.4.0 (Videomancer Mode)
+**Analysis Mode:** Video Hardware with Parameter Validation
+
+## Summary
+
+- **Files Analyzed:** 23 VHDL files
+- **Parse Success Rate:** 95.7% (22/23)
+- **Frequency Violations:** 0
+- **Parameter Violations:** 2 warnings
+- **Overall Status:** ✅ PASS
+
+## Parse Results
+
+### Successfully Parsed (22 files)
+
+✅ lumarian/multiplier.vhd - Radix-4 Booth Multiplier
+✅ lumarian/contrast.vhd - Video Contrast Adjustment
+...
+
+### Parse Failures (1 file)
+
+❌ lumarian/experimental.vhd - Line 42: Unsupported VHDL-2019 construct
+
+## Frequency Analysis
+
+- **Clock Domains:** 1 (50 MHz)
+- **PLL Multipliers:** 0
+- **Frequency Violations:** 0
+
+## Parameter Validation
+
+### Lumarian Configuration
+
+**Config File:** contrib/lzx/lumarian/lumarian.json
+
+✅ P1 (Contrast): RANGE 0-200% - Valid
+✅ P2 (Brightness): RANGE -1.0 to 1.0 - Valid
+⚠️ P3 (Saturation): RANGE 0-200% - Warning: No matching VHDL generic found
+...
+
+## Recommendations
+
+1. Add generic parameter for P3 (Saturation) to VHDL design
+2. Consider documenting parameter mappings in VHDL comments
+```
+
+**Parity:**
+- **Implementation Scope:** `src/VHDL/Videomancer/Report.hs`
+- **Tests:** `test/VHDL/Videomancer/ReportSpec.hs`
+
+## [TestScenario: LZX Corpus 100% Analysis] <lzx-100-test-01>
+
+**Objective:** Verify that Videomancer mode achieves 90%+ parse success on all LZX VHDL files.
+
+**Test Setup:**
+```haskell
+-- ADC-IMPLEMENTS: <lzx-100-test-01>
+spec :: Spec
+spec = describe "LZX Corpus Analysis" $ do
+  it "parses all Lumarian VHDL files" $ do
+    files <- glob "contrib/lzx/lumarian/*.vhd"
+    results <- mapM parseVHDLFile files
+
+    let successCount = length $ rights results
+    let totalCount = length files
+    let successRate = fromIntegral successCount / fromIntegral totalCount * 100
+
+    successRate `shouldSatisfy` (>= 90.0)
+    successCount `shouldBe` 13  -- All 13 Lumarian files
+
+  it "parses all Mirrorbound VHDL files" $ do
+    files <- glob "contrib/lzx/mirrorbound/*.vhd"
+    results <- mapM parseVHDLFile files
+
+    let successCount = length $ rights results
+    successRate <- pure $ fromIntegral successCount / fromIntegral (length files) * 100
+
+    successRate `shouldSatisfy` (>= 90.0)
+    successCount `shouldBe` 9  -- All 9 Mirrorbound files
+```
+
+**Acceptance Criteria:**
+- ✅ 20+ of 23 LZX VHDL files parse successfully (90%+)
+- ✅ All previously-parsed files continue to parse
+- ✅ Parse errors include actionable error messages
+- ✅ No regressions in existing functionality
+
+**Parity:**
+- **Tests:** `test/VHDL/Videomancer/IntegrationSpec.hs`
+
+## [TestScenario: Parameter Validation] <parameter-validation-test-01>
+
+**Objective:** Verify that parameter validation correctly identifies mismatches between JSON configs and VHDL constraints.
+
+**Test Cases:**
+
+```haskell
+-- ADC-IMPLEMENTS: <parameter-validation-test-01>
+spec :: Spec
+spec = describe "Parameter Validation" $ do
+
+  describe "Valid configurations" $ do
+    it "accepts Lumarian config with matching VHDL generics" $ do
+      config <- loadProgramConfig "contrib/lzx/lumarian/lumarian.json"
+      designs <- parseVHDLFiles ["contrib/lzx/lumarian/*.vhd"]
+
+      result <- pure $ validateParameterSoundness config designs Permissive
+      result `shouldSatisfy` isRight
+
+    it "accepts Mirrorbound config with matching VHDL generics" $ do
+      config <- loadProgramConfig "contrib/lzx/mirrorbound/mirrorbound.json"
+      designs <- parseVHDLFiles ["contrib/lzx/mirrorbound/*.vhd"]
+
+      result <- pure $ validateParameterSoundness config designs Permissive
+      result `shouldSatisfy` isRight
+
+  describe "Invalid configurations" $ do
+    it "detects min/max value mismatch" $ do
+      let invalidConfig = ProgramConfig
+            { progName = "Test"
+            , progVersion = "1.0"
+            , progParameters =
+                [ ParameterConfig
+                    { paramRef = "P1"
+                    , paramName = "Contrast"
+                    , paramType = RangeParameter
+                    , paramMin = Just 0
+                    , paramMax = Just 300  -- Exceeds VHDL constraint
+                    , paramFloatPrecision = Just 1
+                    , paramSuffix = Just "%"
+                    , paramLabels = Nothing
+                    }
+                ]
+            }
+
+      designs <- parseVHDLFiles ["test/fixtures/contrast_constraint.vhd"]
+      result <- pure $ validateParameterSoundness invalidConfig designs Strict
+
+      result `shouldSatisfy` isLeft
+      let Left violations = result
+      violations `shouldContain` [ConstraintViolation
+        { cvParameter = "Contrast"
+        , cvViolationType = MaxValueMismatch
+        , cvSeverity = Error
+        }]
+
+    it "detects missing parameters in strict mode" $ do
+      let incompleteConfig = ProgramConfig
+            { progName = "Test"
+            , progVersion = "1.0"
+            , progParameters = []  -- Missing all parameters
+            }
+
+      designs <- parseVHDLFiles ["contrib/lzx/lumarian/lumarian.vhd"]
+      result <- pure $ validateParameterSoundness incompleteConfig designs Strict
+
+      result `shouldSatisfy` isLeft
+```
+
+**Parity:**
+- **Tests:** `test/VHDL/Videomancer/ParameterSpec.hs`
+
+## [Constraint: Performance Requirements] <videomancer-performance-01>
+
+**Analysis Speed:**
+- Parse rate: ≥ 1000 lines/second VHDL
+- Parameter validation: < 100ms per config file
+- Total analysis time: < 5 seconds for entire LZX corpus (23 files, ~2500 lines)
+
+**Memory Usage:**
+- Peak memory: < 100 MB for LZX corpus analysis
+- Streaming parser for large VHDL files (> 10,000 lines)
+
+**Accuracy:**
+- Parse success rate: ≥ 90% on real-world VHDL corpus
+- False positive rate for parameter violations: < 5%
+- False negative rate for parameter violations: 0% (safety-critical)
+
+**Parity:**
+- **Tests:** `test/VHDL/Videomancer/PerformanceSpec.hs`
+
+## [Constraint: Clash Integration] <videomancer-clash-01>
+
+**Type-Level Frequency Validation:**
+
+Integrate compile-time Clash type-level analysis (from `spellcraft-adc-006`) with runtime VHDL analysis:
+
+```haskell
+-- ADC-IMPLEMENTS: <videomancer-clash-01>
+data ClashAnalysisResult = ClashAnalysisResult
+  { carTypeChecked :: Bool
+  , carFrequencyConstraints :: [ClashFrequencyConstraint]
+  , carViolations :: [ClashViolation]
+  } deriving (Show, Eq, Generic)
+
+runClashAnalysis :: [FilePath] -> IO (Either ClashError ClashAnalysisResult)
+runClashAnalysis clashFiles = do
+  -- Run GHC type checker on Clash files
+  ghcResult <- runGHC clashFiles
+
+  -- Extract type-level frequency constraints
+  case ghcResult of
+    Left err -> pure $ Left $ ClashCompileError err
+    Right typeInfo -> do
+      constraints <- extractFrequencyConstraints typeInfo
+      violations <- detectTypeViolations typeInfo
+
+      pure $ Right $ ClashAnalysisResult
+        { carTypeChecked = True
+        , carFrequencyConstraints = constraints
+        , carViolations = violations
+        }
+```
+
+**Integration:**
+- If both `.vhd` and `.hs` files present in contrib directory, run both analyses
+- Cross-validate frequency constraints between VHDL runtime and Clash compile-time
+- Report any inconsistencies as warnings
+
+**Parity:**
+- **Implementation Scope:** `src/VHDL/Videomancer/ClashIntegration.hs`
+- **Tests:** `test/VHDL/Videomancer/ClashIntegrationSpec.hs`
+
+## [Diagram: Videomancer Architecture] <videomancer-architecture-01>
+
+```mermaid
+graph TB
+    CLI[Videomancer CLI] --> Parser[Enhanced VHDL Parser]
+    CLI --> ConfigLoader[JSON Config Loader]
+
+    Parser --> Designs[VHDLDesign AST]
+    ConfigLoader --> Config[ProgramConfig]
+
+    Designs --> FreqAnalysis[Frequency Analysis]
+    Designs --> ConstraintExtractor[Constraint Extractor]
+
+    Config --> ParamValidator[Parameter Validator]
+    ConstraintExtractor --> ParamValidator
+
+    FreqAnalysis --> Report[Report Generator]
+    ParamValidator --> Report
+
+    Report --> Output[Markdown Report]
+
+    subgraph "Enhanced Parser (adc-009)"
+        Parser --> WorkLib[Work Library Parser]
+        Parser --> MultiUnit[Multi-Unit Parser]
+        Parser --> Generics[Generic Parser]
+    end
+
+    subgraph "Parameter Validation"
+        ConstraintExtractor --> GenericConstraints[Generic Constraints]
+        ConfigLoader --> JSONParams[JSON Parameters]
+        GenericConstraints --> ParamValidator
+        JSONParams --> ParamValidator
+    end
+
+    subgraph "Optional Clash Integration (adc-006)"
+        CLI -.-> ClashAnalyzer[Clash Type Checker]
+        ClashAnalyzer -.-> ClashResult[Type-Level Constraints]
+        ClashResult -.-> Report
+    end
+```
+
+## [APIEndpoint: Videomancer Analysis] <videomancer-api-01>
+
+**Function Signature:**
+
+```haskell
+-- ADC-IMPLEMENTS: <videomancer-api-01>
+analyzeVideoHardware :: [VHDLDesign]
+                     -> Maybe ProgramConfig
+                     -> IO AnalysisResult
+
+analyzeVideoHardware designs maybeConfig = do
+  -- Run frequency analysis
+  freqResult <- analyzeFrequencyConstraints designs
+
+  -- Run combinatorial analysis
+  comboResult <- analyzeCombinatorialPaths designs
+
+  -- Run clock graph analysis
+  clockGraph <- buildClockGraph designs
+
+  -- Combine results
+  pure $ AnalysisResult
+    { arFrequencyResult = freqResult
+    , arCombinatorialResult = comboResult
+    , arClockGraph = clockGraph
+    , arViolations = extractViolations freqResult comboResult
+    , arClockSources = extractClockSources designs
+    }
+```
+
+**Error Handling:**
+
+```haskell
+data VideomancerError
+  = ParseError FilePath ParseErrorBundle
+  | ConfigLoadError FilePath Text
+  | ValidationError [ConstraintViolation]
+  | ClashIntegrationError ClashError
+  | ReportGenerationError Text
+  deriving (Show, Eq, Generic)
+
+instance Exception VideomancerError
+```
+
+**Parity:**
+- **Implementation Scope:** `src/VHDL/Videomancer/Analysis.hs`
+- **Tests:** `test/VHDL/Videomancer/AnalysisSpec.hs`
+
+## [Implementation: Integration with Existing Codebase] <videomancer-integration-01>
+
+**Modified Files:**
+
+1. **`src/VHDL/CLI/Options.hs`** - Add `--videomancer` flag
+```haskell
+-- ADC-IMPLEMENTS: <videomancer-integration-01>
+data AnalysisMode
+  = StandardMode
+  | VideomancerMode VideomancerOptions
+  deriving (Show, Eq, Generic)
+
+parseCliOptions :: IO AnalysisMode
+parseCliOptions = do
+  opts <- execParser parserInfo
+  case opts of
+    VideomancerOpts vopts -> pure $ VideomancerMode vopts
+    StandardOpts sopts -> pure StandardMode
+```
+
+2. **`app/Main.hs`** - Route to Videomancer mode
+```haskell
+-- ADC-IMPLEMENTS: <videomancer-integration-01>
+main :: IO ()
+main = do
+  mode <- parseCliOptions
+  case mode of
+    StandardMode -> runStandardAnalysis
+    VideomancerMode opts -> runVideomancer opts >>= exitWith
+```
+
+3. **`spellcraft.cabal`** - Add dependencies
+```cabal
+library
+  exposed-modules:
+    ...
+    VHDL.Videomancer.Config
+    VHDL.Videomancer.Constraint
+    VHDL.Videomancer.Validation
+    VHDL.Videomancer.Report
+    VHDL.Videomancer.Analysis
+    VHDL.CLI.Videomancer
+
+  build-depends:
+    ...
+    , aeson >= 2.0
+    , aeson-pretty >= 0.8
+```
+
+**Parity:**
+- **Modified Files:**
+  - `src/VHDL/CLI/Options.hs`
+  - `app/Main.hs`
+  - `spellcraft.cabal`
+- **Tests:** `test/Integration/VideomancerSpec.hs`
+
+## [Feature: Success Metrics] <videomancer-success-metrics-01>
+
+**Primary Metrics:**
+
+1. **Parse Coverage:**
+   - **Current:** 26% (6/23 LZX files)
+   - **Target:** 90%+ (20+/23 LZX files)
+   - **Measurement:** Automated test suite on LZX corpus
+
+2. **Parameter Validation Accuracy:**
+   - **Target:** 100% detection of range violations
+   - **Target:** < 5% false positive rate
+   - **Measurement:** Unit tests with known good/bad configs
+
+3. **Analysis Performance:**
+   - **Target:** < 5 seconds for full LZX corpus
+   - **Target:** < 100 MB memory usage
+   - **Measurement:** Performance benchmarks
+
+**Secondary Metrics:**
+
+1. **User Adoption:**
+   - CLI usage analytics (if telemetry enabled)
+   - GitHub stars/forks increase
+   - Documentation views
+
+2. **Issue Resolution:**
+   - LZX-related parser issues closed
+   - Parameter validation bug reports
+
+**Parity:**
+- **Tests:** `test/VHDL/Videomancer/MetricsSpec.hs`
+
+## [Reference: Dependencies] <videomancer-dependencies-01>
+
+**Internal Contracts:**
+- `spellcraft-adc-001`: VHDL Parser (base)
+- `spellcraft-adc-009`: VHDL Parser Enhancement (work libraries)
+- `spellcraft-adc-006`: Clash Type-Level Analysis (optional integration)
+- `spellcraft-adc-003`: Frequency Violation Detection
+- `spellcraft-adc-007`: Clock Source Detection
+
+**External Dependencies:**
+- `aeson >= 2.0`: JSON parsing for parameter configs
+- `aeson-pretty >= 0.8`: Pretty-printing JSON errors
+- `megaparsec >= 9.0`: Parser combinators (existing)
+- `clash-prelude >= 1.8`: Type-level analysis (optional)
+
+**Test Dependencies:**
+- `hspec >= 2.11`: Test framework
+- `QuickCheck >= 2.14`: Property testing
+- `hspec-golden >= 0.2`: Golden test for reports
+
+---
+
+## Summary
+
+This contract defines the **Videomancer** feature for Spellcraft, enabling:
+
+1. ✅ **100% LZX Analysis Coverage** via enhanced VHDL parser
+2. ✅ **Parameter Validation** for JSON hardware configs
+3. ✅ **Cross-Validation** between VHDL generics and JSON parameters
+4. ✅ **Comprehensive Reporting** for video synthesis hardware
+5. ✅ **Optional Clash Integration** for compile-time type safety
+
+**Implementation Roadmap:**
+- **Phase 1:** Enhanced VHDL parser (work libraries, multi-unit) - 2 weeks
+- **Phase 2:** JSON config parser and validator - 1 week
+- **Phase 3:** Parameter soundness validation - 1 week
+- **Phase 4:** CLI integration and reporting - 1 week
+- **Phase 5:** Clash integration (optional) - 1 week
+
+**Success Criteria:**
+- Parse 20+ of 23 LZX VHDL files (90%+)
+- Validate all JSON parameter configs against VHDL
+- Generate comprehensive analysis reports
+- Achieve < 5 second analysis time on LZX corpus

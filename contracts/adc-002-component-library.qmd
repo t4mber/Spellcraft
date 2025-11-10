@@ -1,0 +1,286 @@
+---
+title: "Component Constraint Library"
+id: "spellcraft-adc-002"
+version: "2.0.0"
+status: "active"
+dependencies: ["spellcraft-adc-001", "spellcraft-adc-006"]
+---
+
+# Purpose
+
+Define a type-safe library of hardware components with their physical constraints (max frequency, voltage ranges, thermal limits) using Clash's type-level programming features. Success is achieved when components can be instantiated with Clash's type-level naturals and constraints checked at compile-time via type families, with runtime fallback for dynamic analysis.
+
+# Scope
+
+**In Scope:**
+- Define component constraint specifications (max frequency, fan-out limits, voltage ranges)
+- Type-level representation of physical units (MHz, GHz, mA, mV)
+- Component library for PRD test cases (PLL_1, YPbPr_Encoder_A)
+- Extensible framework for adding new components
+- Constraint violation detection types
+
+**Out of Scope:**
+- Full component vendor libraries (Xilinx, Intel, etc.)
+- Dynamic constraint loading from external files (constraints are Haskell code)
+- Automatic constraint inference from datasheets
+- Thermal simulation or power analysis
+
+# Interface
+
+```haskell
+{-# LANGUAGE DataKinds #-}
+{-# LANGUAGE GADTs #-}
+{-# LANGUAGE KindSignatures #-}
+{-# LANGUAGE TypeFamilies #-}
+{-# LANGUAGE TypeOperators #-}
+
+-- Type-level natural numbers for constraints
+import GHC.TypeLits (Nat, KnownNat, natVal, type (<=?))
+import Data.Proxy (Proxy(..))
+
+-- Physical units as type-level tags
+data FreqUnit = Hz | KHz | MHz | GHz
+  deriving (Show, Eq)
+
+data VoltageUnit = MicroV | MilliV | V
+  deriving (Show, Eq)
+
+-- Type-level frequency with unit
+data Frequency (n :: Nat) (u :: FreqUnit) = Frequency
+  { freqValue :: Integer
+  , freqUnit :: FreqUnit
+  } deriving (Show, Eq)
+
+-- Convert to common unit (MHz) for comparison
+class ToMHz (u :: FreqUnit) where
+  toMHz :: Integer -> Double
+
+instance ToMHz 'Hz where toMHz n = fromInteger n / 1_000_000
+instance ToMHz 'KHz where toMHz n = fromInteger n / 1_000
+instance ToMHz 'MHz where toMHz n = fromInteger n
+instance ToMHz 'GHz where toMHz n = fromInteger n * 1_000
+
+-- Component constraint specification
+data ComponentSpec = ComponentSpec
+  { compSpecName :: Text
+  , compSpecGenerics :: [GenericConstraint]
+  , compSpecPorts :: [PortConstraint]
+  } deriving (Show, Eq)
+
+data GenericConstraint = GenericConstraint
+  { genConstraintName :: Identifier
+  , genConstraintType :: GenericType
+  , genConstraintRange :: Maybe Range
+  } deriving (Show, Eq)
+
+data GenericType
+  = IntegerType
+  | RealType
+  | StringType
+  deriving (Show, Eq)
+
+data Range
+  = IntRange Integer Integer  -- min, max
+  | RealRange Double Double
+  deriving (Show, Eq)
+
+data PortConstraint = PortConstraint
+  { portConstraintName :: Identifier
+  , portConstraintDirection :: PortDirection
+  , portConstraintMaxFreq :: Maybe Double  -- in MHz
+  , portConstraintFanOut :: Maybe Int
+  } deriving (Show, Eq)
+
+-- Component library
+type ComponentLibrary = Map Text ComponentSpec
+
+-- Constraint violation types
+data ConstraintViolation
+  = FrequencyViolation
+      { violationComponent :: Text
+      , violationPort :: Identifier
+      , violationActual :: Double  -- MHz
+      , violationMax :: Double     -- MHz
+      , violationLocation :: SourceLocation
+      }
+  | GenericRangeViolation
+      { violationComponent :: Text
+      , violationGeneric :: Identifier
+      , violationValue :: Value
+      , violationRange :: Range
+      , violationLocation :: SourceLocation
+      }
+  | FanOutViolation
+      { violationComponent :: Text
+      , violationPort :: Identifier
+      , violationActual :: Int
+      , violationMax :: Int
+      , violationLocation :: SourceLocation
+      }
+  deriving (Show, Eq)
+
+-- Library interface
+defaultComponentLibrary :: ComponentLibrary
+
+lookupComponent :: Text -> ComponentLibrary -> Maybe ComponentSpec
+
+addComponent :: ComponentSpec -> ComponentLibrary -> ComponentLibrary
+
+checkGenericValue :: GenericConstraint -> Value -> Maybe ConstraintViolation
+
+checkPortFrequency :: PortConstraint -> Double -> Maybe ConstraintViolation
+```
+
+# Constraints
+
+- **Type Safety**: Use type-level naturals to represent frequencies where possible
+- **Extensibility**: Adding new components must not require changes to core types
+- **Performance**: Component lookup must be O(log n) or better
+- **Precision**: Frequency calculations must maintain at least 3 decimal places
+- **Completeness**: Every component must specify ALL relevant constraints (no partial specs)
+
+# Parity
+
+**File Structure:**
+```
+src/
+  VDHL/
+    Constraint/
+      Types.hs       -- Constraint type definitions
+      Library.hs     -- Component library and lookup
+      Units.hs       -- Physical units and conversions
+      Violation.hs   -- Violation detection and reporting
+
+  ComponentLibs/
+    TestComponents.hs  -- PRD test components (PLL_1, YPbPr_Encoder_A)
+```
+
+**Module Naming:**
+- `VDHL.Constraint.Types` exports constraint types
+- `VDHL.Constraint.Library` exports library functions
+- `ComponentLibs.TestComponents` exports `testComponentLibrary`
+
+**Dependencies:**
+- `containers` for Map
+- `clash-prelude >= 1.8` for type-level natural numbers, Signal, Vec
+- `clash-ghc >= 1.8` for GHC type-level features
+- Depends on `spellcraft-adc-001` for AST types
+- Depends on `spellcraft-adc-006` for Clash integration layer
+
+# Examples
+
+## Example 1: Defining PLL Component
+
+```haskell
+pll1Spec :: ComponentSpec
+pll1Spec = ComponentSpec
+  { compSpecName = "PLL_1"
+  , compSpecGenerics =
+      [ GenericConstraint
+          { genConstraintName = "MULT_FACTOR"
+          , genConstraintType = RealType
+          , genConstraintRange = Just (RealRange 1.0 10.0)
+          }
+      ]
+  , compSpecPorts =
+      [ PortConstraint
+          { portConstraintName = "clk_in"
+          , portConstraintDirection = Input
+          , portConstraintMaxFreq = Just 100.0  -- 100 MHz
+          , portConstraintFanOut = Nothing
+          }
+      , PortConstraint
+          { portConstraintName = "clk_out"
+          , portConstraintDirection = Output
+          , portConstraintMaxFreq = Nothing  -- Output freq determined by calculation
+          , portConstraintFanOut = Just 10
+          }
+      ]
+  }
+```
+
+## Example 2: YPbPr Encoder with Max Frequency
+
+```haskell
+ypbprEncoderSpec :: ComponentSpec
+ypbprEncoderSpec = ComponentSpec
+  { compSpecName = "YPbPr_Encoder_A"
+  , compSpecGenerics = []
+  , compSpecPorts =
+      [ PortConstraint
+          { portConstraintName = "pixel_clk"
+          , portConstraintDirection = Input
+          , portConstraintMaxFreq = Just 165.0  -- Max 165 MHz!
+          , portConstraintFanOut = Nothing
+          }
+      ]
+  }
+```
+
+## Example 3: Checking Generic Range
+
+```haskell
+let constraint = GenericConstraint "WIDTH" IntegerType (Just (IntRange 1 32))
+let value = IntValue 64
+
+case checkGenericValue constraint value of
+  Nothing -> putStrLn "Constraint satisfied"
+  Just violation -> print violation
+  -- GenericRangeViolation {violationGeneric = "WIDTH", violationValue = 64, ...}
+```
+
+## Example 4: Type-Level Frequency (Aspirational)
+
+```haskell
+-- Using Clash type-level features for compile-time checks
+data ClockDomain (freq :: Nat) (unit :: FreqUnit) = ClockDomain
+
+-- This would be checked at compile-time in full Clash design
+-- For analyzer, we use runtime checks with type-level inspiration
+checkClockConnection
+  :: Frequency outputFreq outputUnit
+  -> Frequency maxFreq maxUnit
+  -> Maybe ConstraintViolation
+```
+
+# Tests
+
+## Unit Tests
+
+1. **Component Lookup**
+   - Find component by name in library
+   - Handle missing components gracefully
+   - Case-insensitive lookup
+
+2. **Generic Validation**
+   - Detect out-of-range integer generics
+   - Detect out-of-range real generics
+   - Accept valid values within range
+
+3. **Frequency Comparison**
+   - Compare frequencies with different units
+   - Handle conversion precision correctly
+   - Detect exceeding max frequency
+
+4. **Unit Conversion**
+   - Hz → MHz conversion
+   - GHz → MHz conversion
+   - Maintain precision through conversions
+
+## Integration Tests
+
+1. **PRD Test Components**
+   - PLL_1 component correctly specified
+   - YPbPr_Encoder_A component correctly specified
+   - Both components in default library
+
+## Property Tests
+
+1. **Range Invariants**
+   - Range min always <= max
+   - Value in range ⟹ no violation
+   - Value out of range ⟹ violation generated
+
+2. **Frequency Invariants**
+   - Conversion is monotonic (a < b ⟹ toMHz a < toMHz b)
+   - Round-trip conversion preserves ordering

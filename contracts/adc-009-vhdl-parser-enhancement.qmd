@@ -1,0 +1,504 @@
+---
+title: "ADC-008: VHDL Parser Enhancement for Work Library Support"
+id: spellcraft-adc-008
+version: 1.0.0
+status: draft
+created: 2025-11-04
+updated: 2025-11-04
+author: Spellcraft Team
+tags: [vhdl, parser, library-support, lzx-compatibility]
+---
+
+# Contract: VHDL Parser Enhancement for Work Library Support
+
+## Purpose
+
+Enhance the Spellcraft VHDL parser to support advanced VHDL constructs that are currently causing 74% parse failure rate on real-world hardware designs (LZX video synthesis modules). This contract addresses the critical parser limitations preventing comprehensive analysis of production hardware.
+
+**Business Impact:** Increasing parser success rate from 26% to 90%+ will enable Spellcraft to analyze real-world VHDL codebases, validating its value proposition for hardware verification in production environments.
+
+## Context
+
+### Problem Statement
+
+The LZX analysis report (contrib/lzx/lzx-analysis-report.md) revealed that Spellcraft v0.3.0 successfully parsed only 6 out of 23 VHDL files (26% success rate). The remaining 17 files failed due to parser limitations with:
+
+1. **Work Library Clauses** - `library work; use work.all;` patterns
+2. **Multiple Entity/Architecture Pairs** - Parser expects single pairs per file
+3. **Advanced Generic Constructs** - Complex generic parameter declarations
+
+### Current State (v0.3.0)
+
+**Parser Module:** `src/VHDL/Parser.hs` (Megaparsec-based)
+**Success Rate:** 26% on LZX codebase (6/23 files)
+**Blocked Modules:**
+- 11 Lumarian files (arithmetic, signal processing)
+- 6 Mirrorbound files (timing generators, arithmetic)
+
+**Parse Error Pattern:**
+```
+contrib/lzx/lumarian/multiplier.vhd:13:1:
+ | entity multiplier_s is
+ | ^
+unexpected 'e'
+expecting end of input
+```
+
+### Target State
+
+**Success Rate:** 90%+ on LZX codebase (20+/23 files)
+**Supported Constructs:**
+- ✅ Work library declarations and usage
+- ✅ Multiple entity/architecture pairs per file
+- ✅ Complex generic parameter types
+- ✅ Package imports and use clauses
+
+## Verification Criteria
+
+### Acceptance Tests
+
+**Test Suite:** `test/VHDL/Parser/WorkLibrarySpec.hs`
+
+1. **Work Library Parsing** (MUST)
+   ```haskell
+   it "parses work library declarations" $ do
+     parseVHDLFile "test/fixtures/work_library.vhd" `shouldReturn` Right _
+   ```
+
+2. **Multiple Design Units** (MUST)
+   ```haskell
+   it "parses multiple entity/architecture pairs" $ do
+     result <- parseVHDLFile "test/fixtures/multi_entity.vhd"
+     result `shouldSatisfy` hasMultipleEntities
+   ```
+
+3. **LZX Compatibility** (MUST)
+   ```haskell
+   it "parses LZX multiplier module" $ do
+     parseVHDLFile "contrib/lzx/lumarian/multiplier.vhd" `shouldReturn` Right _
+   ```
+
+4. **Regression Prevention** (MUST)
+   - All existing 25 type-level tests continue passing
+   - All 6 previously-parsed LZX files still parse correctly
+
+### Success Metrics
+
+**Primary Metric:**
+- LZX parse success rate: 26% → 90%+ (20+ files)
+
+**Secondary Metrics:**
+- Parse error rate on LZX: 74% → <10%
+- Arithmetic modules analyzed: 0/7 → 7/7
+- Timing generators analyzed: 1/4 → 4/4
+
+### Validation Method
+
+```bash
+# Run parser on all LZX files
+stack exec spellcraft -- contrib/lzx/**/*.vhd
+
+# Expected output:
+# ✅ 20+ designs parsed successfully
+# ❌ <3 parse errors remaining
+# ✓ Analysis complete
+```
+
+## Interface
+
+### Public API
+
+**Module:** `VHDL.Parser`
+
+```haskell
+-- Enhanced parser supporting work libraries
+parseVHDLFile :: FilePath -> IO (Either ParseError VHDLDesign)
+
+-- Parse multiple design units from single file
+parseVHDLMultiUnit :: FilePath -> IO (Either ParseError [VHDLDesign])
+
+-- New: Parse work library declarations
+parseWorkLibrary :: Parser LibraryDeclaration
+
+-- New: Parse use clauses with work references
+parseUseClause :: Parser UseClause
+```
+
+**Data Types:**
+
+```haskell
+-- Add to VHDL.AST
+data LibraryDeclaration = LibraryDeclaration
+  { libName :: Text
+  , libSourceLoc :: SourceLocation
+  } deriving (Show, Eq)
+
+data UseClause = UseClause
+  { useLibrary :: Text
+  , usePackage :: Text  -- "all" for use work.all
+  , useSourceLoc :: SourceLocation
+  } deriving (Show, Eq)
+
+data VHDLDesign = VHDLDesign
+  { designLibraries :: [LibraryDeclaration]  -- New field
+  , designUses :: [UseClause]                -- New field
+  , designEntity :: Entity
+  , designArchitecture :: Maybe Architecture
+  , designOtherUnits :: [VHDLDesign]         -- New: support multiple units
+  } deriving (Show, Eq)
+```
+
+## Implementation
+
+### Architecture
+
+**Parser Enhancement Strategy:**
+
+1. **Work Library Support**
+   - Add `parseLibraryDeclaration` combinator
+   - Add `parseUseClause` combinator
+   - Integrate into top-level `parseVHDLFile`
+
+2. **Multiple Design Units**
+   - Change `parseVHDLFile` to return `[VHDLDesign]` internally
+   - Maintain backward compatibility with single-unit wrapper
+   - Add `parseVHDLMultiUnit` for explicit multi-unit parsing
+
+3. **Generic Enhancement**
+   - Extend `parseGenericClause` for complex types
+   - Support generic type declarations
+   - Handle generic package instantiation
+
+### Key Components
+
+**File:** `src/VHDL/Parser.hs` (Enhanced)
+
+```haskell
+-- ADC-IMPLEMENTS: spellcraft-adc-008
+-- Enhanced VHDL parser with work library support
+
+parseLibraryDeclaration :: Parser LibraryDeclaration
+parseLibraryDeclaration = do
+  loc <- getSourcePos
+  _ <- keyword "library"
+  name <- identifier
+  _ <- symbol ";"
+  pure $ LibraryDeclaration
+    { libName = name
+    , libSourceLoc = toSourceLocation loc
+    }
+
+parseUseClause :: Parser UseClause
+parseUseClause = do
+  loc <- getSourcePos
+  _ <- keyword "use"
+  lib <- identifier
+  _ <- symbol "."
+  pkg <- identifier  -- Can be "all" or package name
+  _ <- symbol ";"
+  pure $ UseClause
+    { useLibrary = lib
+    , usePackage = pkg
+    , useSourceLoc = toSourceLocation loc
+    }
+
+-- Enhanced top-level parser
+parseVHDLDesign :: Parser VHDLDesign
+parseVHDLDesign = do
+  libs <- many parseLibraryDeclaration
+  uses <- many parseUseClause
+  entity <- parseEntity
+  arch <- optional parseArchitecture
+  pure $ VHDLDesign
+    { designLibraries = libs
+    , designUses = uses
+    , designEntity = entity
+    , designArchitecture = arch
+    , designOtherUnits = []
+    }
+
+-- Support multiple design units
+parseVHDLMultiUnit :: Parser [VHDLDesign]
+parseVHDLMultiUnit = some parseVHDLDesign
+```
+
+**File:** `src/VHDL/AST.hs` (Enhanced)
+
+```haskell
+-- ADC-IMPLEMENTS: spellcraft-adc-008
+-- Add library and use clause support to AST
+
+data LibraryDeclaration = LibraryDeclaration
+  { libName :: Text
+  , libSourceLoc :: SourceLocation
+  } deriving (Show, Eq, Generic)
+
+instance ToJSON LibraryDeclaration
+
+data UseClause = UseClause
+  { useLibrary :: Text
+  , usePackage :: Text
+  , useSourceLoc :: SourceLocation
+  } deriving (Show, Eq, Generic)
+
+instance ToJSON UseClause
+
+-- Enhanced VHDLDesign
+data VHDLDesign = VHDLDesign
+  { designLibraries :: [LibraryDeclaration]
+  , designUses :: [UseClause]
+  , designEntity :: Entity
+  , designArchitecture :: Maybe Architecture
+  , designOtherUnits :: [VHDLDesign]
+  } deriving (Show, Eq, Generic)
+```
+
+**File:** `test/VHDL/Parser/WorkLibrarySpec.hs` (New)
+
+```haskell
+-- ADC-IMPLEMENTS: spellcraft-adc-008
+-- Test suite for work library support
+
+module VHDL.Parser.WorkLibrarySpec (spec) where
+
+import Test.Hspec
+import VHDL.Parser
+import VHDL.AST
+
+spec :: Spec
+spec = do
+  describe "Work Library Support" $ do
+    it "parses library work declaration" $ do
+      result <- parseVHDLFile "test/fixtures/work_library.vhd"
+      result `shouldSatisfy` isRight
+      let Right design = result
+      length (designLibraries design) `shouldBe` 1
+      libName (head $ designLibraries design) `shouldBe` "work"
+
+    it "parses use work.all clause" $ do
+      result <- parseVHDLFile "test/fixtures/work_use.vhd"
+      result `shouldSatisfy` isRight
+      let Right design = result
+      length (designUses design) `shouldBe` 1
+      useLibrary (head $ designUses design) `shouldBe` "work"
+      usePackage (head $ designUses design) `shouldBe` "all"
+
+  describe "LZX Compatibility" $ do
+    it "parses lumarian multiplier" $ do
+      result <- parseVHDLFile "contrib/lzx/lumarian/multiplier.vhd"
+      result `shouldSatisfy` isRight
+
+    it "parses mirrorbound video timing generator" $ do
+      result <- parseVHDLFile "contrib/lzx/mirrorbound/video_timing_generator.vhd"
+      result `shouldSatisfy` isRight
+```
+
+### Test Fixtures
+
+**File:** `test/fixtures/work_library.vhd`
+
+```vhdl
+library work;
+use work.all;
+
+entity test_entity is
+  port (
+    clk : in std_logic;
+    data_out : out std_logic_vector(7 downto 0)
+  );
+end entity test_entity;
+
+architecture rtl of test_entity is
+begin
+  data_out <= (others => '0');
+end architecture rtl;
+```
+
+**File:** `test/fixtures/multi_entity.vhd`
+
+```vhdl
+library ieee;
+use ieee.std_logic_1164.all;
+
+entity first_entity is
+  port (clk : in std_logic);
+end entity;
+
+architecture rtl of first_entity is
+begin
+end architecture;
+
+entity second_entity is
+  port (rst : in std_logic);
+end entity;
+
+architecture rtl of second_entity is
+begin
+end architecture;
+```
+
+## Dependencies
+
+### Internal Dependencies
+
+- `VHDL.Lexer` - Token definitions (existing)
+- `VHDL.AST` - Data type definitions (enhanced)
+- `VHDL.SourceLocation` - Location tracking (existing)
+- `VHDL.Parser` - Core parser module (enhanced)
+
+### External Dependencies
+
+- `megaparsec >= 9.0` - Parser combinator library (existing)
+- `parser-combinators >= 1.3` - Additional combinators (existing)
+- `text >= 1.2` - Text handling (existing)
+
+### Version Compatibility
+
+- **Spellcraft:** v0.3.0 → v0.4.0 (minor version bump for new features)
+- **GHC:** 8.10+
+- **Cabal/Stack:** No changes to build configuration
+
+## Parity
+
+### File Structure
+
+```
+src/VHDL/
+  ├── Parser.hs          # Enhanced with work library support
+  ├── AST.hs             # Add LibraryDeclaration and UseClause
+  └── Lexer.hs           # No changes needed
+
+test/VHDL/Parser/
+  └── WorkLibrarySpec.hs # New test suite
+
+test/fixtures/
+  ├── work_library.vhd   # Test fixture
+  └── multi_entity.vhd   # Test fixture
+
+contrib/lzx/           # Existing test corpus (untracked)
+```
+
+### Integration Points
+
+**No Breaking Changes:**
+- Existing `parseVHDLFile` API unchanged
+- Current 25 type-level tests continue passing
+- CLI interface remains identical
+
+**New Capabilities:**
+- Optional multi-unit parsing via `parseVHDLMultiUnit`
+- Library and use clause information in AST
+- Enhanced error messages for unsupported constructs
+
+## Risks and Mitigations
+
+### Risk 1: Parser Complexity
+**Impact:** High
+**Probability:** Medium
+**Mitigation:**
+- Implement incrementally: work library → multi-unit → generics
+- Comprehensive test coverage at each step
+- Parser combinator reuse (DRY principle)
+
+### Risk 2: Breaking Existing Parses
+**Impact:** Critical
+**Probability:** Low
+**Mitigation:**
+- Maintain backward compatibility in API
+- Run full regression suite after each change
+- Guard new features behind optional flags initially
+
+### Risk 3: Incomplete VHDL Standard Support
+**Impact:** Medium
+**Probability:** High
+**Mitigation:**
+- Document supported subset of VHDL-2008
+- Provide clear error messages for unsupported constructs
+- Plan for iterative standard coverage expansion
+
+## Timeline
+
+### Phase 1: Work Library Support (Week 1)
+- [ ] Add `parseLibraryDeclaration` combinator
+- [ ] Add `parseUseClause` combinator
+- [ ] Update `VHDLDesign` AST
+- [ ] Test on LZX files with work libraries
+- **Exit Criteria:** 10+ LZX files parsing successfully
+
+### Phase 2: Multiple Design Units (Week 2)
+- [ ] Implement `parseVHDLMultiUnit`
+- [ ] Add `designOtherUnits` field to AST
+- [ ] Update analysis pipeline for multi-unit designs
+- **Exit Criteria:** 17+ LZX files parsing successfully
+
+### Phase 3: Generic Enhancement (Week 3)
+- [ ] Extend `parseGenericClause` parser
+- [ ] Support complex generic types
+- [ ] Test on remaining LZX files
+- **Exit Criteria:** 20+ LZX files parsing successfully (90%+)
+
+### Phase 4: Documentation & Release (Week 4)
+- [ ] Update CHANGELOG.md
+- [ ] Update README.md with parser capabilities
+- [ ] Re-run LZX analysis and update report
+- [ ] Release v0.4.0
+
+## Success Criteria
+
+### Definition of Done
+
+1. **Parser Enhancement Complete:**
+   - ✅ Work library declarations parsed
+   - ✅ Use clauses with work.all parsed
+   - ✅ Multiple design units per file supported
+
+2. **Testing Complete:**
+   - ✅ New test suite passing (WorkLibrarySpec)
+   - ✅ All existing 25 tests still passing
+   - ✅ LZX corpus success rate: 90%+
+
+3. **Documentation Complete:**
+   - ✅ API documentation updated
+   - ✅ LZX analysis report re-generated
+   - ✅ CHANGELOG.md updated for v0.4.0
+
+4. **Integration Verified:**
+   - ✅ CLI analysis working on LZX files
+   - ✅ No regression in existing functionality
+   - ✅ Performance acceptable (<1s per file)
+
+### Rollback Plan
+
+If critical issues emerge:
+1. Revert parser changes via Git
+2. Restore v0.3.0 parser functionality
+3. Document issues in GitHub issue tracker
+4. Plan incremental approach with feature flags
+
+## Notes
+
+### Related Contracts
+
+- **spellcraft-adc-003:** Frequency Violation Detection (uses parsed AST)
+- **spellcraft-adc-005:** CLI Interface (consumes parser output)
+- **spellcraft-adc-007:** Clock Source Detection (depends on complete parse)
+
+### Future Enhancements
+
+- **VHDL-2008 Full Support:** Protected types, context clauses
+- **VHDL-2019 Features:** Interfaces, conditional compilation
+- **Package Analysis:** Parse and analyze VHDL packages
+- **Component Library Integration:** Auto-generate constraints from packages
+
+### References
+
+- LZX Analysis Report: `contrib/lzx/lzx-analysis-report.md`
+- VHDL-2008 Standard: IEEE 1076-2008
+- Megaparsec Documentation: https://hackage.haskell.org/package/megaparsec
+- Spellcraft Architecture: `docs/architecture-type-level-vs-runtime.md`
+
+---
+
+**Contract Status:** Draft
+**Next Review:** After Phase 1 completion
+**Approval Required:** System Auditor + Code Generator validation

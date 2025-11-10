@@ -1,0 +1,291 @@
+---
+title: "Combinatorial Path Complexity Analyzer"
+id: "spellcraft-adc-004"
+version: "1.0.0"
+status: "active"
+dependencies: ["spellcraft-adc-001"]
+---
+
+# Purpose
+
+Identify potentially problematic combinatorial paths in VDHL processes that chain multiple arithmetic operations without intermediate clock edges, which can lead to timing failures and excessive power draw. Success is achieved when the analyzer can detect chains of 4+ operations as specified in PRD feature F-03.
+
+# Scope
+
+**In Scope:**
+- Parse VDHL process statements (basic support)
+- Identify arithmetic operations (addition, subtraction, multiplication, division)
+- Detect chains of operations without intermediate signal assignments to clocked registers
+- Count operation depth in combinatorial paths
+- Report warnings for paths exceeding threshold (default: 4 operations)
+
+**Out of Scope:**
+- Full VDHL process parsing (only arithmetic within process)
+- Control flow analysis (if/case statements)
+- Data flow analysis for optimization
+- Actual timing analysis (that requires synthesis)
+- Power estimation
+- Automatic optimization suggestions
+
+# Interface
+
+```haskell
+-- Process AST (simplified for combinatorial analysis)
+data Process = Process
+  { procName :: Maybe Identifier
+  , procSensitivity :: [SignalName]
+  , procStatements :: [Statement]
+  , procLocation :: SourceLocation
+  } deriving (Show, Eq)
+
+data Statement
+  = Assignment
+      { assignTarget :: Identifier
+      , assignExpr :: Expression
+      , assignLocation :: SourceLocation
+      }
+  | IfStatement
+      { ifCondition :: Expression
+      , ifThen :: [Statement]
+      , ifElse :: [Statement]
+      , ifLocation :: SourceLocation
+      }
+  | ClockedAssignment  -- Identifies register assignment (future enhancement)
+      { clockedTarget :: Identifier
+      , clockedExpr :: Expression
+      , clockedLocation :: SourceLocation
+      }
+  deriving (Show, Eq)
+
+data Expression
+  = Literal Value
+  | Variable Identifier
+  | BinaryOp BinOp Expression Expression
+  | UnaryOp UnOp Expression
+  | FunctionCall Identifier [Expression]
+  deriving (Show, Eq)
+
+data BinOp
+  = Add | Sub | Mul | Div | Mod
+  | And | Or | Xor
+  | Eq | Neq | Lt | Le | Gt | Ge
+  deriving (Show, Eq, Enum, Bounded)
+
+data UnOp = Negate | Not
+  deriving (Show, Eq, Enum, Bounded)
+
+-- Analysis types
+data CombinatorialPath = CombinatorialPath
+  { cpExpression :: Expression
+  , cpDepth :: Int  -- Number of arithmetic operations
+  , cpOperations :: [BinOp]  -- List of ops in order
+  , cpLocation :: SourceLocation
+  } deriving (Show, Eq)
+
+data ComplexityWarning = ComplexityWarning
+  { cwProcess :: Maybe Identifier
+  , cwPath :: CombinatorialPath
+  , cwThreshold :: Int
+  , cwMessage :: Text
+  } deriving (Show, Eq)
+
+-- Analysis functions
+analyzeProcessComplexity
+  :: Process
+  -> Int  -- Threshold (default: 4)
+  -> [ComplexityWarning]
+
+findCombinatorialPaths
+  :: Expression
+  -> [CombinatorialPath]
+
+calculatePathDepth
+  :: Expression
+  -> Int
+
+-- Architecture-level analysis
+analyzeArchitectureComplexity
+  :: Architecture
+  -> Int  -- Threshold
+  -> [ComplexityWarning]
+
+-- Utility
+isArithmeticOp :: BinOp -> Bool
+isArithmeticOp op = op `elem` [Add, Sub, Mul, Div, Mod]
+```
+
+# Constraints
+
+- **Threshold**: Default warning threshold of 4 arithmetic operations
+- **Accuracy**: No false positives for properly pipelined code
+- **Performance**: Analyze 1000-line process in < 50ms
+- **Heuristic**: Count only arithmetic ops (Add, Sub, Mul, Div), not logical ops
+- **Reporting**: Include expression excerpt in warning (up to 80 chars)
+
+# Parity
+
+**File Structure:**
+```
+src/
+  VDHL/
+    Analysis/
+      Combinatorial.hs  -- Main complexity analysis
+      Process.hs        -- Process AST types and parsing
+      Expression.hs     -- Expression types and utilities
+```
+
+**Module Naming:**
+- `VDHL.Analysis.Combinatorial` exports analysis functions
+- `VDHL.Analysis.Process` exports Process AST types
+- `VDHL.Analysis.Expression` exports expression utilities
+
+**Dependencies:**
+- `spellcraft-adc-001` for base AST types and source locations
+- `text` for string handling
+
+**Algorithm:**
+- Traverse expression tree recursively
+- Count depth as max depth of left + right + 1 for binary ops
+- Filter by `isArithmeticOp` to ignore logical operations
+
+# Examples
+
+## Example 1: Simple Arithmetic Chain
+
+```haskell
+-- VDHL:
+-- process (a, b, c, d, e)
+-- begin
+--   result <= a + b * c - d / e;  -- 4 operations: +, *, -, /
+-- end process;
+
+let expr = BinaryOp Sub
+            (BinaryOp Add
+              (Variable "a")
+              (BinaryOp Mul (Variable "b") (Variable "c")))
+            (BinaryOp Div (Variable "d") (Variable "e"))
+
+let depth = calculatePathDepth expr
+print depth  -- 4
+
+let paths = findCombinatorialPaths expr
+print (cpDepth (head paths))  -- 4
+print (cpOperations (head paths))  -- [Add, Mul, Sub, Div]
+```
+
+## Example 2: Detecting Complexity Warning
+
+```haskell
+-- VDHL with complex combinatorial path:
+-- process (x, y, z)
+-- begin
+--   temp1 <= x * y;
+--   temp2 <= temp1 + z;
+--   temp3 <= temp2 * x;
+--   temp4 <= temp3 - y;
+--   output <= temp4 / z;  -- 5 operations total
+-- end process;
+
+proc <- parseProcess vdhlText
+let warnings = analyzeProcessComplexity proc 4
+
+-- warnings =
+--   [ ComplexityWarning
+--       { cwProcess = Nothing
+--       , cwPath = CombinatorialPath { cpDepth = 5, ... }
+--       , cwThreshold = 4
+--       , cwMessage = "Combinatorial path has 5 arithmetic operations (threshold: 4)"
+--       }
+--   ]
+```
+
+## Example 3: No Warning for Pipelined Code
+
+```haskell
+-- VDHL (properly pipelined):
+-- process (clk)
+-- begin
+--   if rising_edge(clk) then
+--     stage1 <= a * b;       -- Register
+--     stage2 <= stage1 + c;  -- Register
+--     stage3 <= stage2 * d;  -- Register
+--     output <= stage3 - e;  -- Register
+--   end if;
+-- end process;
+
+-- Each assignment is to a clocked register, so no single
+-- combinatorial path exceeds threshold
+proc <- parseProcess vdhlText
+let warnings = analyzeProcessComplexity proc 4
+print (length warnings)  -- 0 (no warnings)
+```
+
+## Example 4: Architecture-Level Analysis
+
+```haskell
+design <- parseVDHLFile "complex_design.vhd"
+let arch = head (designArchitectures design)
+let warnings = analyzeArchitectureComplexity arch 4
+
+forM_ warnings $ \w ->
+  putStrLn $ printf "%s:%d: Warning: %s"
+    (locFile . cpLocation . cwPath $ w)
+    (locLine . cpLocation . cwPath $ w)
+    (cwMessage w)
+-- Output:
+--   complex_design.vhd:42: Warning: Combinatorial path has 6 arithmetic operations (threshold: 4)
+```
+
+# Tests
+
+## Unit Tests
+
+1. **Expression Depth Calculation**
+   - Single operation: depth = 1
+   - Chain of 4 operations: depth = 4
+   - Nested operations: depth = max(left, right) + 1
+   - Non-arithmetic ops don't count
+
+2. **Path Finding**
+   - Find all paths in expression tree
+   - Include operation list in path
+   - Preserve source location
+
+3. **Warning Generation**
+   - Generate warning when depth > threshold
+   - No warning when depth ≤ threshold
+   - Include helpful message text
+
+## Integration Tests
+
+1. **PRD F-03 Example**
+   - Parse VDHL with 4+ chained operations
+   - Detect complexity warning
+   - Verify warning location and message
+
+2. **Pipelined Code**
+   - Parse properly pipelined VDHL
+   - Verify no warnings generated
+
+3. **Mixed Operations**
+   - Arithmetic + logical operations
+   - Only arithmetic should count toward depth
+
+## Property Tests
+
+1. **Depth Invariants**
+   - Depth always ≥ 0
+   - Depth of literal = 0
+   - Depth of variable = 0
+   - Depth of BinaryOp ≥ 1
+
+2. **Warning Invariants**
+   - Warning generated ⟺ depth > threshold
+   - All warnings have valid source locations
+
+## Performance Tests
+
+1. **Large Expressions**
+   - 10-operation expression: < 1ms
+   - 100-operation expression: < 10ms
+   - Memory usage O(n) in expression size

@@ -1,0 +1,292 @@
+---
+title: "Command-Line Interface and Error Reporting"
+id: "spellcraft-adc-005"
+version: "2.0.0"
+status: "active"
+dependencies: ["spellcraft-adc-001", "spellcraft-adc-002", "spellcraft-adc-003", "spellcraft-adc-004", "spellcraft-adc-006"]
+---
+
+# Purpose
+
+Provide a user-friendly command-line interface for the VDHL analyzer that produces clear, actionable error messages pointing to specific VDHL source locations, as specified in PRD feature F-04. Success is achieved when developers can easily understand violations and locate problematic code.
+
+# Scope
+
+**In Scope:**
+- Command-line argument parsing (input files, options)
+- Orchestrate parsing, analysis, and violation detection
+- Format error messages with file:line:column format
+- Support multiple input files
+- Exit codes (0 = success, 1 = violations found, 2 = parse error)
+- Optional verbose mode for detailed output
+- JSON output format for tool integration
+
+**Out of Scope:**
+- GUI or web interface
+- Interactive REPL
+- Configuration files (all via CLI flags)
+- IDE integration plugins (separate project)
+- Continuous watch mode
+
+# Interface
+
+```haskell
+-- Main entry point
+main :: IO ()
+
+-- CLI Options
+data CliOptions = CliOptions
+  { optInputFiles :: [FilePath]
+  , optVerbose :: Bool
+  , optOutputFormat :: OutputFormat
+  , optThreshold :: Int  -- Combinatorial path threshold
+  , optComponentLibrary :: Maybe FilePath  -- Future: external library
+  , optStrictMode :: Bool  -- Fail on warnings
+  } deriving (Show, Eq)
+
+data OutputFormat
+  = HumanReadable
+  | JSON
+  | GCC  -- GCC-style error format for editor integration
+  deriving (Show, Eq, Enum, Bounded)
+
+-- Analysis orchestration
+runAnalysis :: CliOptions -> IO ExitCode
+
+-- Error formatting
+formatViolation :: OutputFormat -> ConstraintViolation -> Text
+
+formatComplexityWarning :: OutputFormat -> ComplexityWarning -> Text
+
+formatParseError :: OutputFormat -> ParseError -> Text
+
+-- Report types
+data AnalysisReport = AnalysisReport
+  { reportFiles :: [FilePath]
+  , reportParseErrors :: [ParseError]
+  , reportViolations :: [ConstraintViolation]
+  , reportWarnings :: [ComplexityWarning]
+  , reportSuccess :: Bool
+  } deriving (Show, Eq)
+
+-- JSON output (for tool integration)
+instance ToJSON AnalysisReport
+instance ToJSON ConstraintViolation
+instance ToJSON ComplexityWarning
+instance ToJSON ParseError
+```
+
+# Constraints
+
+- **Usability**: Error messages must be actionable (tell user what's wrong and where)
+- **Performance**: Startup time < 100ms for small files
+- **Standards**: Follow GNU error format: `file:line:column: error: message`
+- **Color**: Support ANSI color codes (auto-detect terminal capability)
+- **Sorting**: Report errors in file order, then line order
+- **Exit Codes**: Standard Unix exit codes (0 success, non-zero failure)
+
+# Parity
+
+**File Structure:**
+```
+src/
+  Main.hs              -- Entry point, CLI parsing
+  VDHL/
+    CLI/
+      Options.hs       -- CLI option parsing
+      Format.hs        -- Error formatting
+      Report.hs        -- Report generation and output
+      Color.hs         -- ANSI color utilities
+```
+
+**Executable Name:** `vdhl-analyzer`
+
+**Module Naming:**
+- `Main` exports `main`
+- `VDHL.CLI.Options` exports option parsing
+- `VDHL.CLI.Format` exports formatting functions
+- `VDHL.CLI.Report` exports report generation
+
+**Dependencies:**
+- `optparse-applicative` for CLI parsing
+- `aeson` for JSON output
+- `ansi-terminal` for colored output
+- `clash-prelude >= 1.8` for Clash types in error messages
+- All previous ADC contracts for analysis
+
+**Build System:** Cabal or Stack with executable target
+**GHC Extensions:** DataKinds, TypeFamilies, KindSignatures (for Clash integration)
+
+# Examples
+
+## Example 1: Basic Usage
+
+```bash
+$ vdhl-analyzer examples/pll_violation.vhd
+
+examples/pll_violation.vhd:23:5: error: Frequency violation
+  Component 'YPbPr_Encoder_A' port 'pixel_clk' receives 208.0 MHz
+  but maximum is 165.0 MHz
+
+  Clock path:
+    pixel_clk (50.0 MHz) → PLL_1 → high_clk (208.0 MHz) → encoder_inst.pixel_clk
+
+$ echo $?
+1  # Violations found
+```
+
+## Example 2: Multiple Files
+
+```bash
+$ vdhl-analyzer src/*.vhd
+
+src/top.vhd:45:7: error: Frequency violation
+  Component 'Memory_Controller' port 'clk' receives 400.0 MHz
+  but maximum is 333.0 MHz
+
+src/video.vhd:12:3: warning: Combinatorial complexity
+  Process has 6 arithmetic operations (threshold: 4)
+  Consider adding pipeline stages
+
+Found 1 error, 1 warning in 2 files
+
+$ echo $?
+1
+```
+
+## Example 3: Verbose Mode
+
+```bash
+$ vdhl-analyzer --verbose examples/pll_violation.vhd
+
+[INFO] Loading component library (2 components)
+[INFO] Parsing examples/pll_violation.vhd
+[INFO] Building clock graph (5 signals, 3 components)
+[INFO] Propagating clock frequencies
+  pixel_clk: 50.0 MHz
+  high_clk: 208.0 MHz (PLL_1 output, MULT_FACTOR=4.16)
+[INFO] Detecting constraint violations
+
+examples/pll_violation.vhd:23:5: error: Frequency violation
+  Component 'YPbPr_Encoder_A' port 'pixel_clk' receives 208.0 MHz
+  but maximum is 165.0 MHz
+
+[SUMMARY] 1 error, 0 warnings
+```
+
+## Example 4: JSON Output
+
+```bash
+$ vdhl-analyzer --format json examples/pll_violation.vhd
+
+{
+  "files": ["examples/pll_violation.vhd"],
+  "parseErrors": [],
+  "violations": [
+    {
+      "type": "FrequencyViolation",
+      "component": "YPbPr_Encoder_A",
+      "port": "pixel_clk",
+      "actualFrequency": 208.0,
+      "maxFrequency": 165.0,
+      "location": {
+        "file": "examples/pll_violation.vhd",
+        "line": 23,
+        "column": 5
+      }
+    }
+  ],
+  "warnings": [],
+  "success": false
+}
+```
+
+## Example 5: Strict Mode
+
+```bash
+$ vdhl-analyzer --strict examples/with_warning.vhd
+
+examples/with_warning.vhd:15:3: warning: Combinatorial complexity
+  Process has 5 arithmetic operations (threshold: 4)
+
+$ echo $?
+1  # In strict mode, warnings cause non-zero exit
+```
+
+## Example 6: GCC Format (for editor integration)
+
+```bash
+$ vdhl-analyzer --format gcc examples/pll_violation.vhd
+
+examples/pll_violation.vhd:23:5: error: Frequency violation: YPbPr_Encoder_A.pixel_clk receives 208.0 MHz but max is 165.0 MHz
+```
+
+# Tests
+
+## Unit Tests
+
+1. **CLI Parsing**
+   - Parse single file argument
+   - Parse multiple files
+   - Parse --verbose flag
+   - Parse --format option
+   - Parse --threshold with value
+   - Invalid arguments show help
+
+2. **Error Formatting**
+   - Format frequency violation (human-readable)
+   - Format complexity warning (human-readable)
+   - Format parse error (human-readable)
+   - Format all types as JSON
+   - Format all types as GCC style
+
+3. **Color Detection**
+   - Detect TTY vs pipe
+   - Enable/disable color appropriately
+   - ANSI escape codes correct
+
+## Integration Tests
+
+1. **End-to-End Analysis**
+   - Run full analysis on PRD example
+   - Verify correct error message
+   - Verify exit code = 1
+   - Verify file:line:column format
+
+2. **Multiple Files**
+   - Analyze 3 files, 2 with errors
+   - Verify all errors reported
+   - Verify errors sorted by file then line
+
+3. **Success Case**
+   - Analyze valid VDHL with no violations
+   - Verify exit code = 0
+   - Verify success message
+
+4. **Parse Error**
+   - Analyze invalid VDHL
+   - Verify parse error reported
+   - Verify exit code = 2
+
+## System Tests
+
+1. **Shell Integration**
+   - Run from bash/zsh
+   - Check exit codes propagate
+   - Verify stderr vs stdout separation
+
+2. **Editor Integration**
+   - Vim/Emacs quickfix format
+   - VSCode problem matcher
+   - IntelliJ error pattern
+
+## Performance Tests
+
+1. **Startup Time**
+   - Empty file analysis: < 100ms
+   - 10 files: < 500ms
+   - Cold start vs warm start
+
+2. **Large Files**
+   - 1000-line file: < 1s
+   - 10,000-line file: < 5s

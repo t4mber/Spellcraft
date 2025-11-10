@@ -1,0 +1,248 @@
+---
+title: "Clash Type-Level Hardware Constraint Modeling"
+id: "spellcraft-adc-006"
+version: "1.0.0"
+status: "active"
+dependencies: ["spellcraft-adc-002"]
+---
+
+# Purpose
+
+Integrate Clash's type-level programming features to model hardware constraints (frequencies, bit widths, clock domains) at the type level, enabling compile-time verification of constraint compatibility where possible. Success is achieved when frequency mismatches can be detected by the Haskell type checker using Clash's `KnownNat` and type-level arithmetic.
+
+# Scope
+
+**In Scope:**
+- Use Clash's `Signal` type to represent clocked signals with domain information
+- Leverage `Vec n a` for fixed-size hardware vectors
+- Use `KnownNat` constraints for type-level frequency values
+- Implement type families for frequency calculations (multiplication, division)
+- Use Clash's `Clock` and `Domain` types for clock domain tracking
+- Type-level validation of frequency constraints
+
+**Out of Scope:**
+- Actual hardware synthesis (Clash compiler integration)
+- Generating VHDL/Verilog output from the analyzer
+- Simulating hardware behavior
+- Full Clash design workflow (we're using Clash types, not synthesizing)
+
+# Interface
+
+```haskell
+{-# LANGUAGE DataKinds #-}
+{-# LANGUAGE TypeFamilies #-}
+{-# LANGUAGE KindSignatures #-}
+{-# LANGUAGE TypeOperators #-}
+
+import Clash.Prelude
+import GHC.TypeLits
+
+-- Type-level frequency representation using Clash
+type FreqMHz = Nat  -- Frequency in MHz as type-level natural
+
+-- Clock domain with frequency constraint
+data ClockDomain (freq :: FreqMHz) = ClockDomain
+  { domainName :: String
+  , domainFreqMHz :: Integer  -- Runtime value matching type
+  }
+
+-- Type-level frequency arithmetic
+type family FreqMult (f :: FreqMHz) (m :: Nat) :: FreqMHz where
+  FreqMult f m = f * m
+
+type family FreqDiv (f :: FreqMHz) (d :: Nat) :: FreqMHz where
+  FreqDiv f d = Div f d
+
+-- Clash Signal with frequency-tagged domain
+data HWSignal (freq :: FreqMHz) a = HWSignal
+  { hwSignalName :: String
+  , hwSignalDomain :: ClockDomain freq
+  } deriving (Show)
+
+-- Component with frequency constraints at type level
+data Component (inFreq :: FreqMHz) (outFreq :: FreqMHz) = Component
+  { compName :: Text
+  , compInputDomain :: ClockDomain inFreq
+  , compOutputDomain :: ClockDomain outFreq
+  } deriving (Show)
+
+-- PLL with type-level multiplication
+data PLL (inFreq :: FreqMHz) (factor :: Nat) = PLL
+  { pllName :: Text
+  , pllMultFactor :: Integer
+  } deriving (Show)
+
+-- Type-level constraint: output frequency must not exceed maximum
+type family CheckMaxFreq (actual :: FreqMHz) (max :: FreqMHz) :: Constraint where
+  CheckMaxFreq actual max = (actual <=? max) ~ 'True
+
+-- Encoder with maximum input frequency
+data Encoder (maxFreq :: FreqMHz) = Encoder
+  { encoderName :: Text
+  , encoderMaxFreqMHz :: Integer
+  } deriving (Show)
+
+-- Safe connection: ensures frequency compatibility at type level
+connectPLL :: (KnownNat inFreq, KnownNat factor, KnownNat outFreq,
+               outFreq ~ (inFreq * factor))
+           => PLL inFreq factor
+           -> HWSignal inFreq a
+           -> HWSignal outFreq a
+connectPLL pll signal = HWSignal
+  { hwSignalName = hwSignalName signal <> "_pll_out"
+  , hwSignalDomain = ClockDomain "pll_output" (natVal (Proxy @outFreq))
+  }
+
+-- Safe connection to encoder: type error if frequency exceeds max
+connectEncoder :: (KnownNat freq, KnownNat maxFreq, CheckMaxFreq freq maxFreq)
+               => Encoder maxFreq
+               -> HWSignal freq a
+               -> Either ConstraintViolation ()
+connectEncoder encoder signal =
+  let actualFreq = natVal (Proxy @freq)
+      maxFreq = natVal (Proxy @maxFreq)
+  in if actualFreq > maxFreq
+     then Left $ FrequencyViolation
+       { violationComponent = encoderName encoder
+       , violationActual = fromIntegral actualFreq
+       , violationMax = fromIntegral maxFreq
+       }
+     else Right ()
+
+-- Type-level safe design (will not compile if frequencies incompatible)
+type SafeDesign (pixelFreq :: FreqMHz)
+                (pllFactor :: Nat)
+                (encoderMax :: FreqMHz) =
+  CheckMaxFreq (pixelFreq * pllFactor) encoderMax
+
+-- Example: This would fail at compile time if 50 * 4 > 165
+-- exampleDesign :: SafeDesign 50 4 165 => ...
+```
+
+# Constraints
+
+- **Type Safety**: Frequency mismatches should cause compile errors where possible
+- **Precision**: Use `Nat` for exact integer MHz values
+- **Compatibility**: Must work with existing VDHL.AST types
+- **Clash Version**: Requires clash-prelude >= 1.8
+- **GHC Extensions**: DataKinds, TypeFamilies, TypeOperators, KindSignatures
+
+# Parity
+
+**File Structure:**
+```
+src/
+  VDHL/
+    Clash/
+      Types.hs          -- Clash-based type-level hardware types
+      FrequencyCheck.hs -- Type-level frequency validation
+      Domains.hs        -- Clock domain management
+      Constraints.hs    -- Type-level constraint checking
+```
+
+**Module Naming:**
+- `VDHL.Clash.Types` exports Clash-integrated types
+- `VDHL.Clash.FrequencyCheck` exports type-level validation
+- `VDHL.Clash.Domains` exports clock domain utilities
+
+**Dependencies:**
+- `clash-prelude >= 1.8`
+- `clash-ghc >= 1.8` (for type-level features)
+- Existing VDHL.Constraint.* modules
+
+# Examples
+
+## Example 1: Type-Safe PLL Connection
+
+```haskell
+-- This compiles: 50 MHz * 4 = 200 MHz
+pll :: PLL 50 4
+pll = PLL "PLL_1" 4
+
+inputSignal :: HWSignal 50 Bit
+inputSignal = HWSignal "pixel_clk" (ClockDomain "input" 50)
+
+outputSignal :: HWSignal 200 Bit
+outputSignal = connectPLL pll inputSignal
+-- Type checker knows: 50 * 4 = 200
+```
+
+## Example 2: Type-Level Frequency Violation Detection
+
+```haskell
+-- This would FAIL to compile (type error):
+-- encoder :: Encoder 165
+-- badConnection :: HWSignal 208 Bit -> Either ConstraintViolation ()
+-- badConnection = connectEncoder encoder
+-- ERROR: Couldn't match type ''False' with ''True'
+--        arising from constraint: CheckMaxFreq 208 165
+
+-- This compiles fine:
+encoder :: Encoder 165
+goodConnection :: HWSignal 160 Bit -> Either ConstraintViolation ()
+goodConnection = connectEncoder encoder
+-- Type checker verifies: 160 <= 165
+```
+
+## Example 3: PRD Scenario with Type-Level Check
+
+```haskell
+-- Define the components with type-level frequencies
+pixelClock :: HWSignal 50 Bit
+pixelClock = HWSignal "pixel_clk" (ClockDomain "pixel" 50)
+
+pll :: PLL 50 4  -- Multiplies by 4: 50 -> 200
+pll = PLL "PLL_1" 4
+
+highClock :: HWSignal 200 Bit
+highClock = connectPLL pll pixelClock
+
+encoder :: Encoder 165
+encoder = Encoder "YPbPr_Encoder_A" 165
+
+-- This will fail at compile time OR runtime:
+result = connectEncoder encoder highClock
+-- Type system tries to prove: CheckMaxFreq 200 165
+-- Which reduces to: (200 <=? 165) ~ 'True
+-- Type error: Couldn't match ''False' with ''True'
+```
+
+# Tests
+
+## Compile-Time Tests
+
+1. **Type-Level Frequency Arithmetic**
+   - Verify `FreqMult 50 4` reduces to `200`
+   - Verify `FreqDiv 100 2` reduces to `50`
+   - Test type family evaluation
+
+2. **Constraint Checking**
+   - Valid frequency connection compiles
+   - Invalid frequency connection fails at compile time
+   - Boundary cases (equal frequencies)
+
+## Runtime Tests
+
+1. **KnownNat Reflection**
+   - Extract runtime values from type-level naturals
+   - Verify `natVal` produces correct MHz values
+   - Test frequency calculations match types
+
+2. **Violation Detection**
+   - Runtime check catches violations missed by types
+   - Error messages include type-level information
+   - Violations reference both type and value frequencies
+
+## Integration Tests
+
+1. **Existing AST Integration**
+   - Convert parsed VDHL to Clash types
+   - Extract frequencies from generic maps
+   - Build typed clock graph
+
+## Property Tests
+
+1. **Type Safety Invariants**
+   - If compilation succeeds, runtime checks pass
+   - Type-level arithmetic matches runtime arithmetic
+   - All type-level frequencies are positive

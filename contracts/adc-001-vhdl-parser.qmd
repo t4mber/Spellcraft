@@ -1,0 +1,242 @@
+---
+title: "VDHL Parser and AST Builder"
+id: "spellcraft-adc-001"
+version: "1.0.0"
+status: "active"
+dependencies: []
+---
+
+# Purpose
+
+Parse VDHL source files (entity, architecture, component instantiation, generic map, port map) and construct a type-safe Abstract Syntax Tree (AST) that preserves source location information for error reporting. Success is achieved when the parser handles the VDHL subset defined in the PRD and produces an AST suitable for constraint analysis.
+
+# Scope
+
+**In Scope:**
+- Parse VDHL entity declarations
+- Parse architecture bodies
+- Parse component instantiations
+- Parse generic maps (parameter assignments)
+- Parse port maps (signal connections)
+- Capture source locations (file, line, column)
+- Generate parse errors with precise location information
+
+**Out of Scope:**
+- Full VDHL-2008 syntax compliance
+- VDHL processes and behavioral code parsing (beyond basic process structure)
+- VDHL package parsing
+- Complex expressions (only literals and identifiers needed)
+- Synthesizable VDHL validation (that's the synthesis tool's job)
+
+# Interface
+
+```haskell
+-- Core AST types
+data VDHLDesign = VDHLDesign
+  { designEntities :: [Entity]
+  , designArchitectures :: [Architecture]
+  , designSourceFile :: FilePath
+  } deriving (Show, Eq)
+
+data Entity = Entity
+  { entityName :: Identifier
+  , entityGenerics :: [GenericDecl]
+  , entityPorts :: [PortDecl]
+  , entityLocation :: SourceLocation
+  } deriving (Show, Eq)
+
+data Architecture = Architecture
+  { archName :: Identifier
+  , archEntityName :: Identifier
+  , archComponents :: [ComponentInst]
+  , archLocation :: SourceLocation
+  } deriving (Show, Eq)
+
+data ComponentInst = ComponentInst
+  { compInstName :: Identifier
+  , compComponentName :: Identifier
+  , compGenericMap :: [(Identifier, Value)]
+  , compPortMap :: [(Identifier, SignalName)]
+  , compLocation :: SourceLocation
+  } deriving (Show, Eq)
+
+data GenericDecl = GenericDecl
+  { genericName :: Identifier
+  , genericType :: TypeName
+  , genericDefault :: Maybe Value
+  } deriving (Show, Eq)
+
+data PortDecl = PortDecl
+  { portName :: Identifier
+  , portDirection :: PortDirection
+  , portType :: TypeName
+  } deriving (Show, Eq)
+
+data PortDirection = Input | Output | InOut
+  deriving (Show, Eq, Enum, Bounded)
+
+type Identifier = Text
+type TypeName = Text
+type SignalName = Text
+
+data Value
+  = IntValue Integer
+  | RealValue Double
+  | StringValue Text
+  | IdentifierValue Identifier
+  deriving (Show, Eq)
+
+data SourceLocation = SourceLocation
+  { locFile :: FilePath
+  , locLine :: Int
+  , locColumn :: Int
+  } deriving (Show, Eq)
+
+-- Parser interface
+parseVDHLFile :: FilePath -> IO (Either ParseError VDHLDesign)
+
+parseVDHLText :: Text -> FilePath -> Either ParseError VDHLDesign
+
+data ParseError = ParseError
+  { parseErrorMessage :: Text
+  , parseErrorLocation :: SourceLocation
+  } deriving (Show, Eq)
+```
+
+# Constraints
+
+- **Performance**: Parse 1000 lines of VDHL in < 100ms on typical hardware
+- **Memory**: Parser state must not exceed 10MB for files up to 10,000 lines
+- **Error Recovery**: Must report first parse error with line/column precision
+- **Type Safety**: AST types must be total (no partial functions like `head`)
+- **Format Support**: Accept both VDHL-93 and VDHL-2008 syntax for supported constructs
+
+# Parity
+
+**File Structure:**
+```
+src/
+  VDHL/
+    Parser.hs          -- Main parser implementation
+    AST.hs             -- AST type definitions
+    Lexer.hs           -- Tokenization
+    SourceLocation.hs  -- Source location tracking
+```
+
+**Module Naming:**
+- `VDHL.Parser` exports `parseVDHLFile`, `parseVDHLText`
+- `VDHL.AST` exports all AST types
+- `VDHL.SourceLocation` exports location tracking utilities
+
+**Dependencies:**
+- `megaparsec` >= 9.0 for parser combinators
+- `text` for efficient string handling
+- `filepath` for path manipulation
+
+# Examples
+
+## Example 1: Parsing a Simple Entity
+
+```haskell
+-- Input VDHL:
+-- entity counter is
+--   generic (WIDTH : integer := 8);
+--   port (
+--     clk : in std_logic;
+--     rst : in std_logic;
+--     count : out std_logic_vector(WIDTH-1 downto 0)
+--   );
+-- end entity counter;
+
+result <- parseVDHLFile "counter.vhd"
+case result of
+  Left err -> putStrLn $ "Parse error: " <> show err
+  Right design -> do
+    let entity = head (designEntities design)
+    print (entityName entity)  -- "counter"
+    print (length (entityGenerics entity))  -- 1
+    print (length (entityPorts entity))  -- 3
+```
+
+## Example 2: Parsing Component Instantiation
+
+```haskell
+-- Input VDHL:
+-- architecture rtl of top is
+-- begin
+--   pll_inst : component PLL_1
+--     generic map (
+--       MULT_FACTOR => 4.16
+--     )
+--     port map (
+--       clk_in => pixel_clk,
+--       clk_out => high_clk
+--     );
+-- end architecture rtl;
+
+result <- parseVDHLFile "top.vhd"
+case result of
+  Right design -> do
+    let arch = head (designArchitectures design)
+    let inst = head (archComponents arch)
+    print (compComponentName inst)  -- "PLL_1"
+    print (compGenericMap inst)  -- [("MULT_FACTOR", RealValue 4.16)]
+```
+
+## Example 3: Error Reporting
+
+```haskell
+-- Input VDHL with error:
+-- entity bad is
+--   port (
+--     clk in std_logic  -- Missing colon
+--   );
+-- end entity bad;
+
+result <- parseVDHLFile "bad.vhd"
+case result of
+  Left (ParseError msg loc) ->
+    putStrLn $ locFile loc <> ":" <> show (locLine loc) <> ":"
+            <> show (locColumn loc) <> ": " <> msg
+    -- Output: "bad.vhd:3:9: Expected ':' after port name"
+```
+
+# Tests
+
+## Unit Tests
+
+1. **Lexer Tests**
+   - Tokenize VDHL keywords correctly
+   - Handle identifiers, numbers, strings
+   - Track source locations accurately
+
+2. **Parser Tests**
+   - Parse entity declarations with generics and ports
+   - Parse architecture bodies with component instantiations
+   - Parse generic maps with integer, real, and string values
+   - Parse port maps connecting signals
+
+3. **Error Handling Tests**
+   - Report missing semicolons with correct location
+   - Report mismatched keywords (entity/end entity)
+   - Handle unexpected EOF gracefully
+
+## Integration Tests
+
+1. **Real VDHL Files**
+   - Parse example PLL entity from PRD scenario
+   - Parse example YPbPr encoder entity
+   - Parse top-level design instantiating both
+
+## Property Tests
+
+1. **Round-trip Properties**
+   - For valid VDHL subset, parsing should always succeed
+   - Source locations should always be valid (line > 0, col > 0)
+
+## Performance Tests
+
+1. **Benchmark Parsing Speed**
+   - 1000 lines in < 100ms
+   - 10,000 lines in < 1s
+   - Memory usage linear with input size
