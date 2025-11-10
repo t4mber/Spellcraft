@@ -20,6 +20,11 @@ module VHDL.AST
   , ArchStatement(..)
   , Statement(..)
   , ComponentInst(..)
+    -- * Expressions
+  , Expression(..)
+  , BinaryOp(..)
+  , UnaryOp(..)
+  , Literal(..)
     -- * Types
   , Identifier
   , TypeName
@@ -122,7 +127,7 @@ data ArchStatement
       }
   | ConcurrentAssignment
       { concTarget :: SignalName
-      , concSource :: SignalName
+      , concExpr :: Expression  -- Changed from SignalName per ADC-013
       , concLocation :: SourceLocation
       }
   | ComponentInstStmt ComponentInst
@@ -132,17 +137,42 @@ instance ToJSON ArchStatement
 
 -- | Sequential statement (inside processes)
 -- Contract: spellcraft-adc-012 Section: Signal Usage Tracker
+-- Enhanced: spellcraft-adc-013 Section: AST Extensions
 data Statement
   = SignalAssignment
       { stmtTarget :: SignalName
-      , stmtSource :: SignalName
+      , stmtExpr :: Expression  -- Changed from SignalName per ADC-013
+      , stmtLocation :: SourceLocation
+      }
+  | VariableAssignment
+      { stmtVarTarget :: Identifier
+      , stmtVarExpr :: Expression
       , stmtLocation :: SourceLocation
       }
   | IfStatement
-      { stmtCondition :: SignalName
+      { stmtCondition :: Expression  -- Changed from SignalName per ADC-013
       , stmtThen :: [Statement]
+      , stmtElsifs :: [(Expression, [Statement])]  -- Added per ADC-013
       , stmtElse :: [Statement]
       , stmtLocation :: SourceLocation
+      }
+  | CaseStatement
+      { stmtCaseExpr :: Expression
+      , stmtWhenClauses :: [(Expression, [Statement])]
+      , stmtLocation :: SourceLocation
+      }
+  | LoopStatement
+      { stmtLoopVar :: Maybe Identifier
+      , stmtLoopRange :: Maybe (Expression, Expression)
+      , stmtLoopBody :: [Statement]
+      , stmtLocation :: SourceLocation
+      }
+  | WaitStatement
+      { stmtWaitExpr :: Maybe Expression
+      , stmtLocation :: SourceLocation
+      }
+  | NullStatement
+      { stmtLocation :: SourceLocation
       }
   deriving (Show, Eq, Generic)
 
@@ -186,3 +216,45 @@ data Value
   deriving (Show, Eq, Generic)
 
 instance ToJSON Value
+
+-- | VHDL Expressions (according to ADC-013)
+-- Contract: spellcraft-adc-013 Section: AST Extensions
+data Expression
+  = IdentifierExpr Identifier
+  | LiteralExpr Literal
+  | BinaryExpr BinaryOp Expression Expression
+  | UnaryExpr UnaryOp Expression
+  | FunctionCall Identifier [Expression]
+  | IndexedName Expression Expression
+  | Aggregate [Expression]
+  deriving (Show, Eq, Generic)
+
+instance ToJSON Expression
+
+-- | Binary operators
+data BinaryOp
+  = Add | Sub | Mul | Div | Mod | Rem
+  | And | Or | Xor | Nand | Nor
+  | Eq | NEq | Lt | Gt | LEq | GEq
+  | Concat
+  deriving (Show, Eq, Generic)
+
+instance ToJSON BinaryOp
+
+-- | Unary operators
+data UnaryOp
+  = Not | Negate
+  deriving (Show, Eq, Generic)
+
+instance ToJSON UnaryOp
+
+-- | Literal values in expressions
+data Literal
+  = IntLiteral Integer
+  | RealLiteral Double
+  | StringLiteral Text
+  | CharLiteral Char
+  | BitLiteral Bool
+  deriving (Show, Eq, Generic)
+
+instance ToJSON Literal

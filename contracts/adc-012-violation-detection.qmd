@@ -1,7 +1,7 @@
 ---
 title: "ADC-012: VHDL Violation Detection Framework"
 date: 2025-11-09
-status: active
+status: partial
 priority: 1
 ---
 
@@ -10,9 +10,10 @@ priority: 1
 - **Contract ID**: spellcraft-adc-012
 - **Title**: VHDL Violation Detection Framework
 - **Date Issued**: 2025-11-09
-- **Status**: Active
+- **Status**: Partial (Priority 1 implemented, 2-3 pending)
 - **Depends On**: ADC-011 (Chaos Monkey), Parser Implementation
-- **Iteration**: 1
+- **Iteration**: 2
+- **Last Updated**: 2025-11-10
 
 ## Purpose
 
@@ -26,10 +27,16 @@ Implement static analysis violation detection based on priorities identified in 
 - Clock analysis: Basic infrastructure exists but no violations reported
 
 **Evaluation Results** (from CHAOS_MONKEY_EVALUATION_REPORT.md):
-- Level 1 (Obvious): Undriven signal `THIS_SIGNAL_IS_NEVER_USED` - NOT DETECTED ❌
+- Level 1 (Obvious): Undriven signal `THIS_SIGNAL_IS_NEVER_USED` - ✅ DETECTED (as of 2025-11-10)
 - Level 2 (Moderate): Latch inference from incomplete assignment - NOT DETECTED ❌
 - Level 3 (Subtle): Silent overflow in counter - NOT DETECTED ❌
 - Level 5 (Extremely Subtle): Delta cycle race - correctly not detected ✓
+
+**Implementation Status** (2025-11-10):
+- Priority 1 (Signal Usage): ✅ Implemented, detecting Level 1 violations
+- Priority 2 (Control Flow): ⏳ Pending
+- Priority 3 (Arithmetic): ⏳ Pending
+- False Positive Rate: 100% due to missing process parsing (see ADC-013)
 
 **Gap Analysis**:
 1. No signal usage tracking (declarations vs assignments)

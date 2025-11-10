@@ -108,12 +108,22 @@ collectFromArchStatement (ComponentInstStmt _) =
   []
 
 -- | Collect assignments from a sequential statement
+-- Enhanced: spellcraft-adc-013 Section: SignalUsage Updates
 collectFromSeqStatement :: Statement -> [(Identifier, [SourceLocation])]
 collectFromSeqStatement (SignalAssignment target _ loc) =
   [(target, [loc])]
-collectFromSeqStatement (IfStatement _ thenStmts elseStmts _) =
+collectFromSeqStatement (VariableAssignment _ _ _) =
+  []  -- Variables don't count as signal assignments
+collectFromSeqStatement (IfStatement _ thenStmts elsifs elseStmts _) =
   concatMap collectFromSeqStatement thenStmts ++
+  concatMap (concatMap collectFromSeqStatement . snd) elsifs ++
   concatMap collectFromSeqStatement elseStmts
+collectFromSeqStatement (CaseStatement _ whenClauses _) =
+  concatMap (concatMap collectFromSeqStatement . snd) whenClauses
+collectFromSeqStatement (LoopStatement _ _ body _) =
+  concatMap collectFromSeqStatement body
+collectFromSeqStatement (WaitStatement _ _) = []
+collectFromSeqStatement (NullStatement _) = []
 
 -- | Collect all signal reads from architecture statements
 -- Contract: spellcraft-adc-012 Section: Signal Usage Tracker
@@ -123,20 +133,56 @@ collectSignalReads arch =
   in Set.fromList stmtReads
 
 -- | Collect reads from an architecture statement
+-- Enhanced: spellcraft-adc-013 Section: SignalUsage Updates
 collectReadsFromArchStatement :: ArchStatement -> [Identifier]
 collectReadsFromArchStatement (ProcessStmt _ sensitivity stmts _) =
   -- Sensitivity list contains signals that are read
   sensitivity ++ concatMap collectReadsFromSeqStatement stmts
-collectReadsFromArchStatement (ConcurrentAssignment _ source _) =
-  [source]
+collectReadsFromArchStatement (ConcurrentAssignment _ expr _) =
+  extractSignalsFromExpr expr
 collectReadsFromArchStatement (ComponentInstStmt comp) =
   -- Port map connections are reads
   map snd (compPortMap comp)
 
 -- | Collect reads from a sequential statement
+-- Enhanced: spellcraft-adc-013 Section: SignalUsage Updates
 collectReadsFromSeqStatement :: Statement -> [Identifier]
-collectReadsFromSeqStatement (SignalAssignment _ source _) =
-  [source]
-collectReadsFromSeqStatement (IfStatement cond thenStmts elseStmts _) =
-  cond : (concatMap collectReadsFromSeqStatement thenStmts ++
-          concatMap collectReadsFromSeqStatement elseStmts)
+collectReadsFromSeqStatement (SignalAssignment _ expr _) =
+  extractSignalsFromExpr expr
+collectReadsFromSeqStatement (VariableAssignment _ expr _) =
+  extractSignalsFromExpr expr
+collectReadsFromSeqStatement (IfStatement cond thenStmts elsifs elseStmts _) =
+  extractSignalsFromExpr cond ++
+  concatMap collectReadsFromSeqStatement thenStmts ++
+  concatMap (concatMap collectReadsFromSeqStatement . snd) elsifs ++
+  concatMap collectReadsFromSeqStatement elseStmts
+collectReadsFromSeqStatement (CaseStatement expr whenClauses _) =
+  extractSignalsFromExpr expr ++
+  concatMap (\(whenExpr, stmts) ->
+    extractSignalsFromExpr whenExpr ++
+    concatMap collectReadsFromSeqStatement stmts
+  ) whenClauses
+collectReadsFromSeqStatement (LoopStatement _ range body _) =
+  (case range of
+     Just (start, end) -> extractSignalsFromExpr start ++ extractSignalsFromExpr end
+     Nothing -> []) ++
+  concatMap collectReadsFromSeqStatement body
+collectReadsFromSeqStatement (WaitStatement mexpr _) =
+  maybe [] extractSignalsFromExpr mexpr
+collectReadsFromSeqStatement (NullStatement _) = []
+
+-- | Extract signal references from expressions
+-- Contract: spellcraft-adc-013 Section: SignalUsage Updates
+extractSignalsFromExpr :: Expression -> [Identifier]
+extractSignalsFromExpr (IdentifierExpr name) = [name]
+extractSignalsFromExpr (LiteralExpr _) = []
+extractSignalsFromExpr (BinaryExpr _ left right) =
+  extractSignalsFromExpr left ++ extractSignalsFromExpr right
+extractSignalsFromExpr (UnaryExpr _ expr) =
+  extractSignalsFromExpr expr
+extractSignalsFromExpr (FunctionCall _ args) =
+  concatMap extractSignalsFromExpr args
+extractSignalsFromExpr (IndexedName base idx) =
+  extractSignalsFromExpr base ++ extractSignalsFromExpr idx
+extractSignalsFromExpr (Aggregate exprs) =
+  concatMap extractSignalsFromExpr exprs

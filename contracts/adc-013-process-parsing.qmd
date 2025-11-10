@@ -1,0 +1,259 @@
+---
+title: "ADC-013: VHDL Process Body Parsing"
+date: 2025-11-10
+status: active
+priority: 1
+---
+
+## Contract Metadata
+
+- **Contract ID**: spellcraft-adc-013
+- **Title**: VHDL Process Body Parsing Implementation
+- **Date Issued**: 2025-11-10
+- **Status**: Active
+- **Depends On**: ADC-012 (Violation Detection), ADC-001 (Parser)
+- **Iteration**: 1
+
+## Purpose
+
+Implement complete parsing of VHDL process bodies to eliminate false positives in signal usage detection. Currently, the parser returns empty statement lists for process bodies, causing all signals assigned inside processes to appear as "undriven" violations.
+
+## Motivation
+
+**Current State**:
+- Signal Usage Tracker: ✅ Implemented and detecting violations
+- Process body parsing: ❌ Returns empty lists
+- False positive rate: 100% on clean code
+- Detection accuracy: Level 1 chaos violations detected correctly
+
+**Impact**:
+- 44 false positives detected in 5 clean Lumarian files
+- ~80% of false positives are signals assigned in processes
+- ~20% are signals driven by component outputs
+- Makes violation detection unusable in production
+
+## Scope
+
+### In Scope
+
+**Phase 1 - Sequential Statement Parsing**:
+- Signal assignments: `signal <= expression`
+- Variable assignments: `variable := expression`
+- If/elsif/else statements with nested statements
+- Case/when statements
+- Loop statements (for, while)
+- Wait statements
+- Assert statements
+
+**Phase 2 - Expression Parsing**:
+- Arithmetic expressions: `+`, `-`, `*`, `/`, `mod`, `rem`
+- Logical expressions: `and`, `or`, `xor`, `not`
+- Relational expressions: `=`, `/=`, `<`, `>`, `<=`, `>=`
+- Concatenation: `&`
+- Type conversions and qualifications
+- Function calls
+- Indexed names and slices
+
+**Phase 3 - Advanced Constructs**:
+- Generate statements
+- Block statements
+- Procedure calls
+- Exit and next statements
+- Null statements
+
+### Out of Scope
+
+- Package parsing
+- Configuration specifications
+- Attribute specifications
+- Alias declarations
+
+## Deliverables
+
+### Parser Extensions
+
+**File**: `src/VHDL/Parser.hs`
+
+**Functions to Implement**:
+```haskell
+-- Parse sequential statements inside process
+parseSequentialStatements :: Parser [Statement]
+
+-- Parse individual statement types
+parseSignalAssignment :: Parser Statement
+parseVariableAssignment :: Parser Statement
+parseIfStatement :: Parser Statement
+parseCaseStatement :: Parser Statement
+parseLoopStatement :: Parser Statement
+
+-- Parse expressions
+parseExpression :: Parser Expression
+parsePrimaryExpression :: Parser Expression
+parseBinaryOp :: Parser BinaryOp
+parseUnaryOp :: Parser UnaryOp
+```
+
+### AST Extensions
+
+**File**: `src/VHDL/AST.hs`
+
+**Types to Extend**:
+```haskell
+data Statement
+  = SignalAssignment
+      { stmtTarget :: SignalName
+      , stmtExpr :: Expression  -- Change from SignalName
+      , stmtLocation :: SourceLocation
+      }
+  | VariableAssignment
+      { stmtVarTarget :: Identifier
+      , stmtVarExpr :: Expression
+      , stmtLocation :: SourceLocation
+      }
+  | IfStatement
+      { stmtCondition :: Expression  -- Change from SignalName
+      , stmtThen :: [Statement]
+      , stmtElsifs :: [(Expression, [Statement])]
+      , stmtElse :: [Statement]
+      , stmtLocation :: SourceLocation
+      }
+  | CaseStatement
+      { stmtCaseExpr :: Expression
+      , stmtWhenClauses :: [(Expression, [Statement])]
+      , stmtLocation :: SourceLocation
+      }
+
+data Expression
+  = IdentifierExpr Identifier
+  | LiteralExpr Literal
+  | BinaryExpr BinaryOp Expression Expression
+  | UnaryExpr UnaryOp Expression
+  | FunctionCall Identifier [Expression]
+  | IndexedName Expression Expression
+  | Aggregate [Expression]
+  deriving (Show, Eq)
+
+data BinaryOp = Add | Sub | Mul | Div | Mod | Rem
+              | And | Or | Xor | Nand | Nor
+              | Eq | NEq | Lt | Gt | LEq | GEq
+              | Concat
+  deriving (Show, Eq)
+```
+
+### Signal Usage Updates
+
+**File**: `src/VHDL/Analysis/SignalUsage.hs`
+
+**Functions to Update**:
+```haskell
+-- Extract signal references from expressions
+extractSignalsFromExpr :: Expression -> [Identifier]
+
+-- Update to handle new Statement types
+collectFromSeqStatement :: Statement -> [(Identifier, [SourceLocation])]
+
+-- Update to handle expression-based reads
+collectReadsFromSeqStatement :: Statement -> [Identifier]
+```
+
+## Validation Criteria
+
+### Success Metrics
+
+**Phase 1 - Basic Process Parsing**:
+- ✅ Parse signal assignments in processes
+- ✅ Parse if/then/else statements
+- ✅ Reduce false positive rate from 100% to < 20%
+
+**Phase 2 - Expression Support**:
+- ✅ Parse arithmetic and logical expressions
+- ✅ Extract signal names from complex expressions
+- ✅ Reduce false positive rate to < 10%
+
+**Phase 3 - Complete Coverage**:
+- ✅ Parse all sequential statement types
+- ✅ Handle nested and complex constructs
+- ✅ Reduce false positive rate to < 5%
+
+### Test Cases
+
+**Test 1 - Simple Assignment**:
+```vhdl
+process(clk)
+begin
+  if rising_edge(clk) then
+    s_data <= input;
+  end if;
+end process;
+```
+Expected: `s_data` marked as assigned, not undriven
+
+**Test 2 - Complex Expression**:
+```vhdl
+s_result <= (s_input and s_mask) or s_default;
+```
+Expected: `s_input`, `s_mask`, `s_default` marked as read
+
+**Test 3 - Case Statement**:
+```vhdl
+case state is
+  when IDLE => next_state <= READY;
+  when READY => next_state <= ACTIVE;
+  when others => next_state <= IDLE;
+end case;
+```
+Expected: `state` marked as read, `next_state` marked as assigned
+
+## Implementation Plan
+
+### Week 1: Core Sequential Statements
+- Day 1-2: Implement `parseSignalAssignment` and `parseIfStatement`
+- Day 3-4: Update AST with `Expression` type
+- Day 5: Test on chaos monkey corpus
+
+### Week 2: Expression Parser
+- Day 1-2: Implement expression parser with precedence
+- Day 3-4: Add binary and unary operators
+- Day 5: Extract signals from expressions
+
+### Week 3: Advanced Constructs
+- Day 1-2: Case statements and loops
+- Day 3-4: Integration testing
+- Day 5: Performance optimization
+
+## Risk Assessment
+
+**High Risk**:
+- Expression precedence parsing complexity
+- Backward compatibility with existing code
+
+**Medium Risk**:
+- Performance impact on large files
+- Ambiguous VHDL constructs
+
+**Mitigation**:
+- Use proven precedence parsing techniques
+- Extensive regression testing
+- Incremental rollout with feature flags
+
+## Success Criteria
+
+**Minimum Viable**:
+- Parse basic signal assignments in processes
+- Reduce false positives by 50%
+
+**Full Implementation**:
+- Parse all common sequential statements
+- < 5% false positive rate on clean code
+- Maintain 100% detection of chaos violations
+
+**Stretch Goals**:
+- Variable tracking
+- Procedure/function body parsing
+- Generate statement support
+
+---
+
+**Contract Status**: Active
+**Next Review**: After Phase 1 completion
+**Owner**: Signal Usage Analysis Team
