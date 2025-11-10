@@ -2,6 +2,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 
 -- ADC-IMPLEMENTS: spellcraft-adc-001
+-- ADC-IMPLEMENTS: spellcraft-adc-008
 module VHDL.Parser
   ( -- * Parsing
     parseVHDLFile
@@ -54,41 +55,74 @@ convertSourcePos path posState =
     }
 
 -- | Parse complete VHDL design
+-- Contract: spellcraft-adc-008 Section: Implementation
+-- Simplified: Parse library/use clauses, then all design units (entities + architectures)
+-- | Helper type for parsing context items (libraries and uses interleaved)
+data ContextItem = LibItem LibraryDeclaration | UseItem UseClause
+
 vhdlDesign :: FilePath -> Parser VHDLDesign
 vhdlDesign path = do
   sc  -- Consume initial whitespace/comments
-  -- Skip library and use clauses (not analyzed yet, but need to be consumed)
-  void $ many (try libraryClause <|> try useClause)
+  -- Parse library and use clauses (can be interleaved in VHDL-2008)
+  contextItems <- many (try parseContextItem)
+  let libraries = [lib | LibItem lib <- contextItems]
+  let uses = [use | UseItem use <- contextItems]
+  -- Parse all design units (entities and architectures intermixed)
   entities <- many (try entityDecl)
+  sc  -- Ensure whitespace consumed before architectures
   architectures <- many (try architectureDecl)
   eof
   pure VHDLDesign
-    { designEntities = entities
+    { designLibraries = libraries
+    , designUses = uses
+    , designEntities = entities
     , designArchitectures = architectures
     , designSourceFile = path
     }
 
--- | Parse and skip library clause
-libraryClause :: Parser ()
-libraryClause = do
+-- | Parse a single context item (library or use clause)
+parseContextItem :: Parser ContextItem
+parseContextItem = try (LibItem <$> parseLibraryDeclaration) <|> try (UseItem <$> parseUseClause)
+
+-- | Parse library declaration (e.g., "library work;")
+-- Contract: spellcraft-adc-008 Section: Implementation
+parseLibraryDeclaration :: Parser LibraryDeclaration
+parseLibraryDeclaration = do
+  pos <- getSourcePos
   void $ keyword "library"
-  void $ identifier
+  name <- identifier
   void $ symbol ";"
   sc
+  pure LibraryDeclaration
+    { libName = name
+    , libSourceLoc = sourcePosToLocation pos
+    }
 
--- | Parse and skip use clause
-useClause :: Parser ()
-useClause = do
+-- | Parse use clause (e.g., "use work.all;")
+-- Contract: spellcraft-adc-008 Section: Implementation
+parseUseClause :: Parser UseClause
+parseUseClause = do
+  pos <- getSourcePos
   void $ keyword "use"
   -- Use clause can have dots: work.all, ieee.std_logic_1164.all
-  void $ identifier
-  void $ many (try (symbol "." >> identifier))
+  lib <- identifier
+  void $ symbol "."
+  pkgParts <- identifier `sepBy1` (symbol ".")
   void $ symbol ";"
   sc
+  -- For multi-part package names like ieee.std_logic_1164.all,
+  -- join them all together to preserve the full path
+  let pkg = T.intercalate "." pkgParts
+  pure UseClause
+    { useLibrary = lib
+    , usePackage = pkg
+    , useSourceLoc = sourcePosToLocation pos
+    }
 
 -- | Parse entity declaration
 entityDecl :: Parser Entity
 entityDecl = do
+  sc  -- Consume leading whitespace/comments
   pos <- getSourcePos
   void $ keyword "entity"
   name <- identifier
@@ -172,6 +206,7 @@ parseDirection = choice
 -- | Parse architecture declaration
 architectureDecl :: Parser Architecture
 architectureDecl = do
+  sc  -- Consume leading whitespace/comments
   pos <- getSourcePos
   void $ keyword "architecture"
   name <- identifier
@@ -183,11 +218,13 @@ architectureDecl = do
   void $ keyword "begin"
   -- Parse component instantiations (skip processes and other constructs)
   components <- many (try componentInst)
-  -- Skip everything until "end architecture" specifically
+  -- Skip body until terminating "end architecture".
+  -- NOTE: This currently only supports the explicit "end architecture" form,
+  -- not the shorthand "end <name>;" form. This is a known limitation.
   _ <- skipManyTill anySingle
         (try $ lookAhead $ keyword "end" >> keyword "architecture")
   void $ keyword "end"
-  void $ keyword "architecture"
+  void $ optional (try $ keyword "architecture")
   void $ optional (try identifier)
   void semi
   pure Architecture

@@ -1,9 +1,13 @@
 {-# LANGUAGE DeriveGeneric #-}
 
 -- ADC-IMPLEMENTS: spellcraft-adc-001
+-- ADC-IMPLEMENTS: spellcraft-adc-008
 module VHDL.AST
   ( -- * Design
     VHDLDesign(..)
+    -- * Library and Use Clauses
+  , LibraryDeclaration(..)
+  , UseClause(..)
     -- * Entity
   , Entity(..)
   , GenericDecl(..)
@@ -24,10 +28,32 @@ import Data.Text (Text)
 import GHC.Generics (Generic)
 import VHDL.SourceLocation (SourceLocation)
 
+-- | Library declaration (e.g., "library work;")
+-- Contract: spellcraft-adc-008 Section: Interface
+data LibraryDeclaration = LibraryDeclaration
+  { libName :: Text
+  , libSourceLoc :: SourceLocation
+  } deriving (Show, Eq, Generic)
+
+instance ToJSON LibraryDeclaration
+
+-- | Use clause (e.g., "use work.all;")
+-- Contract: spellcraft-adc-008 Section: Interface
+data UseClause = UseClause
+  { useLibrary :: Text
+  , usePackage :: Text
+  , useSourceLoc :: SourceLocation
+  } deriving (Show, Eq, Generic)
+
+instance ToJSON UseClause
+
 -- | A complete VHDL design (entities and architectures)
 -- Contract: spellcraft-adc-001 Section: Interface
+-- Enhanced: spellcraft-adc-008 Section: Interface (added libraries and uses)
 data VHDLDesign = VHDLDesign
-  { designEntities :: [Entity]
+  { designLibraries :: [LibraryDeclaration]
+  , designUses :: [UseClause]
+  , designEntities :: [Entity]
   , designArchitectures :: [Architecture]
   , designSourceFile :: FilePath
   } deriving (Show, Eq, Generic)
