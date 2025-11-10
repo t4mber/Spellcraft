@@ -234,10 +234,14 @@ processStmt = do
   void $ keyword "process"
   -- Parse sensitivity list
   sensitivity <- option [] $ parens (identifier `sepBy` comma)
+  trace ("Parsed sensitivity list: " ++ show sensitivity) $ pure ()
   -- Skip declarations for now
-  _ <- optional $ do
+  _ <- optional $ try $ do
+    trace "Trying to skip declarations" $ pure ()
     _ <- skipManyTill anySingle (try $ lookAhead $ keyword "begin")
+    trace "Skipped declarations" $ pure ()
     pure ()
+  trace "About to consume 'begin'" $ pure ()
   void $ keyword "begin"
   trace "After 'begin' keyword" $ pure ()
   -- Debug: try to peek at next token
@@ -419,8 +423,8 @@ sourcePosToLocation pos = SourceLocation
 -- Contract: spellcraft-adc-013 Section: Parser Extensions
 parseSequentialStatements :: Parser [Statement]
 parseSequentialStatements = trace "parseSequentialStatements called" $ do
-  -- Try with many instead
-  stmts <- many parseSequentialStatement
+  -- Use manyTill with lookAhead to stop when we see "end"
+  stmts <- manyTill parseSequentialStatement (trace "checking for end" $ lookAhead $ keyword "end")
   trace ("Parsed " ++ show (length stmts) ++ " statements") $ pure ()
   trace ("Statement types: " ++ show (map stmtType stmts)) $ pure stmts
   where
@@ -433,10 +437,9 @@ parseSequentialStatements = trace "parseSequentialStatements called" $ do
     stmtType (NullStatement _) = "NullStatement"
 
     parseSequentialStatement = trace "parseSequentialStatement called" $ do
-      sc  -- Skip whitespace/comments
-      trace "After sc, trying choice" $ pure ()
+      trace "trying choice" $ pure ()
       -- Try to parse different statement types
-      choice
+      result <- choice
         [ trace "Trying parseSignalAssignment" $ try parseSignalAssignment
         , trace "Trying parseVariableAssignment" $ try parseVariableAssignment
         , trace "Trying parseIfStatement" $ try parseIfStatement
@@ -445,16 +448,22 @@ parseSequentialStatements = trace "parseSequentialStatements called" $ do
         , trace "Trying parseWaitStatement" $ try parseWaitStatement
         , trace "Trying parseNullStatement" $ try parseNullStatement
         ]
+      trace ("parseSequentialStatement succeeded: " ++ show (stmtType result)) $ pure ()
+      pure result
 
 -- | Parse signal assignment statement
 -- Contract: spellcraft-adc-013 Section: Parser Extensions
 parseSignalAssignment :: Parser Statement
 parseSignalAssignment = do
   pos <- getSourcePos
-  target <- identifier
+  target <- trace "parseSignalAssignment: parsing target" identifier
+  trace ("parseSignalAssignment: got target " ++ show target) $ pure ()
   void $ symbol "<="
+  trace "parseSignalAssignment: consumed <=" $ pure ()
   expr <- parseExpression
+  trace "parseSignalAssignment: got expression" $ pure ()
   void semi
+  trace "parseSignalAssignment: consumed semicolon" $ pure ()
   pure SignalAssignment
     { stmtTarget = target
     , stmtExpr = expr
@@ -662,18 +671,17 @@ parseMultiplyingExpr = parseBinaryOp parseUnaryExpr
 
 parseUnaryExpr :: Parser Expression
 parseUnaryExpr = choice
-  [ UnaryExpr Not <$> (keyword "not" >> parseUnaryExpr)
-  , UnaryExpr Negate <$> (symbol "-" >> parseUnaryExpr)
+  [ try $ UnaryExpr Not <$> (keyword "not" >> parseUnaryExpr)
+  , try $ UnaryExpr Negate <$> (symbol "-" >> parseUnaryExpr)
   , parsePrimaryExpr
   ]
 
 parsePrimaryExpr :: Parser Expression
 parsePrimaryExpr = choice
-  [ try parseFunctionCall
-  , try parseIndexedName
-  , try (parens parseExpression)  -- Moved before parseAggregate to prioritize simple parens
-  , try parseLiteral
-  , IdentifierExpr <$> identifier
+  [ try (parens parseExpression)  -- Try parentheses first
+  , try parseLiteral               -- Then literals
+  , try parseFunctionCallOrIndexed -- Function calls/indexed (has '(' after identifier)
+  , IdentifierExpr <$> identifier  -- Finally bare identifiers
   ]
 
 -- | Parse binary operators with left associativity
@@ -686,22 +694,40 @@ parseBinaryOp parseHigher ops = do
     pure (op, right)
   pure $ foldl (\acc (op, right) -> BinaryExpr op acc right) left rest
 
--- | Parse function call
-parseFunctionCall :: Parser Expression
-parseFunctionCall = do
+-- | Parse function call or indexed name
+-- Combined to avoid parsing identifier twice
+-- Uses try to backtrack if there's no '(' after identifier
+parseFunctionCallOrIndexed :: Parser Expression
+parseFunctionCallOrIndexed = try $ do
   name <- identifier
-  args <- parens (parseExpression `sepBy` comma)
-  pure $ FunctionCall name args
+  -- Now parse as function call or indexed name
+  result <- parens $ do
+    -- Parse first expression
+    firstExpr <- parseExpression
+    -- Check if there are more (comma-separated for function, or another paren for indexed)
+    rest <- many $ try $ (comma >> parseExpression)
+    pure (firstExpr, rest)
+  -- Process result
+  let (firstExpr, rest) = result
+  if null rest
+    then do
+      -- Single expression - could be function call with one arg or indexed name
+      -- Try to see if there are more indices
+      moreIndices <- many $ try $ parens parseExpression
+      if null moreIndices
+        then pure $ FunctionCall name [firstExpr]  -- Function call with 1 arg
+        else pure $ foldl IndexedName (IdentifierExpr name) (firstExpr : moreIndices)
+    else
+      -- Multiple comma-separated expressions - function call
+      pure $ FunctionCall name (firstExpr : rest)
 
--- | Parse indexed name (array access)
+-- | Parse function call (kept for backward compat, delegates to combined parser)
+parseFunctionCall :: Parser Expression
+parseFunctionCall = parseFunctionCallOrIndexed
+
+-- | Parse indexed name (kept for backward compat, delegates to combined parser)
 parseIndexedName :: Parser Expression
-parseIndexedName = do
-  name <- identifier
-  -- Must have at least one index
-  idx <- parens parseExpression
-  -- May have more indices
-  moreIndices <- many $ try $ parens parseExpression
-  pure $ foldl IndexedName (IdentifierExpr name) (idx : moreIndices)
+parseIndexedName = parseFunctionCallOrIndexed
 
 -- | Parse aggregate (array literal)
 -- Note: This is for aggregates like (others => '0'), not simple parentheses

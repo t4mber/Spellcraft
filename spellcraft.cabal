@@ -1,6 +1,6 @@
 cabal-version:      3.0
 name:               spellcraft
-version:            0.3.0
+version:            0.4.0
 synopsis:           Spellcraft - Safe Programmable Electronics Linting Library
 description:
   Spellcraft: Safe Programmable Electronics Linting Library & Code Review Analysis Framework Tool.

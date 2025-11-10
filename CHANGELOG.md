@@ -5,6 +5,89 @@ All notable changes to the Spellcraft will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.4.0] - 2025-11-10
+
+### Added - Parser Enhancement & Process Analysis 🔧
+
+#### Work Library Support (ADC-008)
+- **Added:** Complete support for `library work;` declarations
+- **Added:** Multi-level package paths (`use work.package.subpackage.all;`)
+- **Added:** `LibraryDeclaration` and `UseClause` AST types
+- **Impact:** Parser now handles real-world VHDL library patterns
+- **Contract:** spellcraft-adc-008 Phase 1 complete
+
+#### Process Body Parsing (ADC-013)
+- **Added:** Full process statement parsing with control flow
+- **Added:** `Expression` AST with operator precedence
+- **Added:** Support for if/elsif/else, case, loop, wait statements
+- **Added:** Signal and variable assignments
+- **Impact:** Can now analyze process behavior and detect violations
+- **Contract:** spellcraft-adc-013 complete
+
+#### Signal Usage Tracking (ADC-012)
+- **Added:** Signal declaration tracking in architectures
+- **Added:** Architecture statement types (processes, concurrent, components)
+- **Added:** `SignalDecl`, `ArchStatement`, `Statement` AST types
+- **Impact:** Foundation for violation detection
+- **Contract:** spellcraft-adc-012 Priority 1 complete
+
+### Enhanced - AST & Parser
+
+#### AST Extensions
+- **Added:** `SignalDecl` for signal declarations
+- **Added:** `ArchStatement` for architecture-level statements
+- **Added:** `Statement` for sequential statements (in processes)
+- **Added:** `Expression` with full operator support
+- **Added:** `BinaryOp`, `UnaryOp`, `Literal` types
+
+#### Parser Improvements
+- **Enhanced:** Architecture parsing with signal declarations
+- **Enhanced:** Process parsing with full statement support
+- **Enhanced:** Expression parsing with correct precedence
+- **Enhanced:** Better error recovery and reporting
+
+### Changed - Parser Behavior
+
+#### Context Item Parsing
+- **Changed:** Library and use clauses can now be interleaved (VHDL-2008 compliant)
+- **Changed:** Parser consumes whitespace more reliably
+- **Improved:** Better handling of Windows line endings
+
+### Fixed - Parser Issues
+
+#### Regression Fixes
+- **Fixed:** Parser now correctly handles multi-level package names
+- **Fixed:** Work library clauses no longer cause parse failures
+- **Fixed:** Process statements parse correctly with all control flow
+
+### Testing
+
+**Test Suite Growth:** 28 → 36 tests (+29%)
+- ✅ Work library tests: 3/3 passing
+- ✅ Process parsing tests: 8/8 passing
+- ✅ Type-level tests: 25/25 passing
+- ✅ Zero test failures
+
+### Contract Compliance
+
+**Contracts Implemented:**
+- ✅ ADC-008 Phase 1: Work Library Support
+- ✅ ADC-012 Priority 1: Signal Usage Tracking
+- ✅ ADC-013: Process Body Parsing
+
+**Contract Status:**
+- ADC-008 Phase 2: In Progress (multi-unit support)
+- ADC-012 Priority 2-3: Pending (control flow & arithmetic analysis)
+
+### Performance
+
+- **Build Time:** ~15s clean build
+- **Test Execution:** <1s for full suite
+- **Memory:** Stable, no leaks
+- **Code Quality:** Clean compilation, no warnings
+
+---
+
 ## [0.3.0] - 2025-11-04
 
 ### Added - Clash File Support 🎉
