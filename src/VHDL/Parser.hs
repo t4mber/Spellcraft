@@ -65,6 +65,10 @@ convertSourcePos path posState =
 -- | Helper type for parsing context items (libraries and uses interleaved)
 data ContextItem = LibItem LibraryDeclaration | UseItem UseClause
 
+-- ADC-IMPLEMENTS: spellcraft-adc-025
+-- | Helper type for parsing design units (entities and architectures in any order)
+data DesignUnit = EntityUnit Entity | ArchUnit Architecture
+
 vhdlDesign :: FilePath -> Parser VHDLDesign
 vhdlDesign path = trace "vhdlDesign called" $ do
   sc  -- Consume initial whitespace/comments
@@ -73,13 +77,14 @@ vhdlDesign path = trace "vhdlDesign called" $ do
   let libraries = [lib | LibItem lib <- contextItems]
   let uses = [use | UseItem use <- contextItems]
   trace ("Parsed " ++ show (length contextItems) ++ " context items") $ pure ()
-  -- Parse all design units (entities and architectures intermixed)
-  entities <- many (try entityDecl)
-  trace ("Parsed " ++ show (length entities) ++ " entities") $ pure ()
-  sc  -- Ensure whitespace consumed before architectures
-  trace "About to parse architectures" $ pure ()
-  architectures <- many (try architectureDecl)
-  trace ("Parsed " ++ show (length architectures) ++ " architectures") $ pure ()
+  -- ADC-IMPLEMENTS: spellcraft-adc-025
+  -- Parse design units in any order (entities and architectures can be intermixed)
+  -- This allows standalone architecture files without entities
+  designUnits <- many (try parseDesignUnit)
+  trace ("Parsed " ++ show (length designUnits) ++ " design units") $ pure ()
+  let entities = [e | EntityUnit e <- designUnits]
+  let architectures = [a | ArchUnit a <- designUnits]
+  trace ("  Entities: " ++ show (length entities) ++ ", Architectures: " ++ show (length architectures)) $ pure ()
   trace "About to check eof" $ pure ()
   eof
   trace "Parse complete!" $ pure ()
@@ -94,6 +99,13 @@ vhdlDesign path = trace "vhdlDesign called" $ do
 -- | Parse a single context item (library or use clause)
 parseContextItem :: Parser ContextItem
 parseContextItem = try (LibItem <$> parseLibraryDeclaration) <|> try (UseItem <$> parseUseClause)
+
+-- ADC-IMPLEMENTS: spellcraft-adc-025
+-- | Parse a single design unit (entity or architecture in any order)
+-- This allows standalone architecture files without entities
+parseDesignUnit :: Parser DesignUnit
+parseDesignUnit =
+  try (EntityUnit <$> entityDecl) <|> try (ArchUnit <$> architectureDecl)
 
 -- | Parse library declaration (e.g., "library work;")
 -- Contract: spellcraft-adc-008 Section: Implementation

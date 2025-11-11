@@ -1,0 +1,312 @@
+---
+title: "ADC-025: Advanced VHDL Parsing Features"
+id: spellcraft-adc-025
+status: active
+created: 2025-11-10
+updated: 2025-11-10
+---
+
+# Purpose
+
+Address remaining parser limitations blocking the final 8 files (35%) of the LZX corpus to achieve 90%+ parse rate target. These files exhibit advanced VHDL features not yet supported.
+
+## Background
+
+**Current State:**
+- Parse rate: 65% (15/23 files)
+- Target: 90%+ (21/23 files)
+- Gap: 6 files needed
+- Blocking: 8 files with advanced features
+
+**Previous Improvements:**
+- ADC-022: Indexed signal assignments (60% achieved)
+- ADC-023: TO direction slices (60% maintained)
+- ADC-024: Case statements (65% achieved)
+
+**Remaining Blockers (8 files):**
+1. `lumarian/lumarian.vhd` - Standalone architecture (no entity in file)
+2. `lumarian/multiplier.vhd` - Complex constant expressions with generics
+3. `mirrorbound/edge_detector.vhd` - Unknown blocker (appears standard)
+4. `mirrorbound/mirror_delay_line_slv.vhd` - Unknown blocker
+5. `mirrorbound/mirrorbound.vhd` - Unknown blocker
+6. `mirrorbound/multiplier.vhd` - Complex constant expressions
+7. `mirrorbound/video_timing_accumulator.vhd` - Unknown blocker
+8. `mirrorbound/video_timing_generator.vhd` - Unknown blocker
+
+# Interface
+
+## Feature 1: Standalone Architecture Parsing
+
+**Problem:** Files with architecture but no entity declaration fail with "unexpected 'a' expecting end of input".
+
+**Example:**
+```vhdl
+-- lumarian.vhd
+library work;
+use work.all;
+
+architecture lumarian of program_yuv444 is
+  -- Implementation
+begin
+  -- ...
+end architecture;
+```
+
+**Current Behavior:**
+```
+Parse results - VHDL errors: 1, designs: 0
+unexpected 'a' at line 24
+```
+
+**Required Change:**
+```haskell
+-- ADC-IMPLEMENTS: spellcraft-adc-025
+vhdlDesign :: FilePath -> Parser VHDLDesign
+vhdlDesign path = do
+  contextItems <- many (try parseContextItem)
+  -- Parse design units in any order
+  designUnits <- many (try parseDesignUnit)
+  eof
+  let entities = [e | EntityUnit e <- designUnits]
+  let architectures = [a | ArchUnit a <- designUnits]
+  pure VHDLDesign { ... }
+
+parseDesignUnit :: Parser DesignUnit
+parseDesignUnit =
+  (EntityUnit <$> entityDecl) <|> (ArchUnit <$> architectureDecl)
+```
+
+## Feature 2: Complex Constant Expressions
+
+**Problem:** Constant declarations with arithmetic using generics fail.
+
+**Example:**
+```vhdl
+constant C_PRODUCT_WIDTH : integer := 2 * C_DATA_WIDTH;
+constant C_STAGES : integer := (C_DATA_WIDTH + 1) / 2;
+constant C_MIN : signed(G_WIDTH - 1 downto 0) := to_signed(G_OUTPUT_MIN, G_WIDTH);
+```
+
+**Analysis:** These may already work - need empirical testing. Issue might be in how constants are skipped in architecture declarations.
+
+## Feature 3: Unknown Blockers Investigation
+
+**Systematic Debugging Required:**
+
+For each failing file:
+1. Add detailed tracing to architecture parser
+2. Identify exact failure point
+3. Create minimal reproduction test case
+4. Implement targeted fix
+
+**Debug Protocol:**
+```haskell
+architectureDecl = trace "architectureDecl ENTER" $ do
+  trace "Parsing 'architecture' keyword" $ void $ keyword "architecture"
+  name <- trace "Parsing architecture name" $ identifier
+  trace ("Architecture: " ++ show name) $ void $ keyword "of"
+  entityName <- trace "Parsing entity name" $ identifier
+  trace ("For entity: " ++ show entityName) $ void $ keyword "is"
+  -- Signal declarations
+  trace "Parsing signal declarations" $ signals <- many (try signalDecl)
+  trace ("Parsed " ++ show (length signals) ++ " signals") $
+    void $ keyword "begin"
+  -- ... continue with detailed traces
+```
+
+# Implementation
+
+## Phase 1: Standalone Architecture Support
+
+### Files to Modify
+- `src/VHDL/Parser.hs`: Update `vhdlDesign` to handle architecture-only files
+- `src/VHDL/AST.hs`: May need to add `DesignUnit` sum type
+- `test/fixtures/test_standalone_arch.vhd`: Create test fixture
+
+### Implementation Steps
+1. Create `DesignUnit` type or modify parsing order
+2. Allow architectures to appear before entities
+3. Update design validation to accept orphan architectures
+4. Test with lumarian.vhd
+
+## Phase 2: Empirical Investigation
+
+### For Each Failing File
+1. **Enable tracing**: Add comprehensive debug output
+2. **Run parser**: Capture full trace to identify failure point
+3. **Isolate feature**: Extract minimal code demonstrating issue
+4. **Create test**: Add to test/fixtures/
+5. **Implement fix**: Targeted parser modification
+6. **Verify**: Test on original file and all passing files
+
+### Systematic Approach
+```bash
+# For each file:
+for file in contrib/lzx/*/*.vhd; do
+  if ! spellcraft "$file" 2>&1 | grep -q "designs: 1"; then
+    echo "=== FAILING: $file ==="
+    spellcraft "$file" 2>&1 | grep -E "(Parse error|unexpected)" -A 5
+  fi
+done
+```
+
+## Phase 3: Common Pattern Fixes
+
+After investigating all 8 files, implement common patterns:
+- Port/generic declaration edge cases
+- Signal/constant declaration variations
+- Process/architecture body constructs
+- Type declaration complexities
+
+# Parity
+
+## File Locations
+- Contract: `/Users/tad/t4mber/spellcraft/contracts/adc-025-advanced-vhdl-parsing.qmd`
+- Parser: `/Users/tad/t4mber/spellcraft/src/VHDL/Parser.hs`
+- Tests: `/Users/tad/t4mber/spellcraft/test/fixtures/test_advanced_*.vhd`
+
+# Requirements
+
+## Functional
+
+### Must Support
+1. Architecture declarations without entity in same file
+2. Complex arithmetic expressions in constant declarations
+3. All 8 currently failing files must parse
+
+### Nice to Have
+4. Better error messages for common failures
+5. Partial parsing for files with minor issues
+
+## Non-Functional
+
+1. Parse rate: 65% → 90%+ (15/23 → 21/23 files)
+2. All 15 currently passing files must still pass (no regressions)
+3. Parse time: <10% increase acceptable
+4. Memory usage: No significant increase
+
+# Test Plan
+
+## Unit Tests
+
+### Test 1: Standalone Architecture
+```vhdl
+-- test/fixtures/test_standalone_arch.vhd
+library work;
+
+architecture test_arch of external_entity is
+  signal s_data : std_logic;
+begin
+  s_data <= '0';
+end architecture;
+```
+
+### Test 2: Complex Constants
+```vhdl
+-- test/fixtures/test_complex_constants.vhd
+entity test_constants is
+  generic (G_WIDTH : integer := 8);
+end test_constants;
+
+architecture rtl of test_constants is
+  constant C_DOUBLE : integer := 2 * G_WIDTH;
+  constant C_HALF : integer := (G_WIDTH + 1) / 2;
+  constant C_MIN : signed(G_WIDTH - 1 downto 0) := to_signed(0, G_WIDTH);
+begin
+end architecture;
+```
+
+## Integration Tests
+
+### Failing Files (Target: 6+/8 parsing)
+1. ✅ lumarian/lumarian.vhd - Standalone architecture
+2. ✅ lumarian/multiplier.vhd - Complex constants
+3. ❓ mirrorbound/edge_detector.vhd - Investigate
+4. ❓ mirrorbound/mirror_delay_line_slv.vhd - Investigate
+5. ❓ mirrorbound/mirrorbound.vhd - Investigate
+6. ✅ mirrorbound/multiplier.vhd - Complex constants
+7. ❓ mirrorbound/video_timing_accumulator.vhd - Investigate
+8. ❓ mirrorbound/video_timing_generator.vhd - Investigate
+
+### Regression Tests
+All 15 currently passing files must still parse:
+- lumarian/: enhance.vhd, gamma.vhd, squarer.vhd, subtractor.vhd, contrast.vhd, filter.vhd, interpolator.vhd, inverter.vhd, diff_multiplier.vhd, delay.vhd
+- mirrorbound/: video_timing_generator.vhd, diff_multiplier.vhd, video_field_detector.vhd, subtractor.vhd, contrast.vhd
+
+## Debugging Tests
+
+For each unknown blocker:
+1. Run with full tracing enabled
+2. Capture failure point
+3. Binary search file content to isolate issue
+4. Create minimal test case
+5. Document finding in this contract
+
+# Success Criteria
+
+## Minimum (Phase 1)
+1. ✅ Standalone architecture files parse
+2. ✅ Parse rate: 65% → 70%+ (15/23 → 16/23 files)
+3. ✅ No regressions in passing files
+
+## Target (Phase 2)
+1. ✅ 6+ of 8 failing files now parse
+2. ✅ Parse rate: 65% → 90%+ (15/23 → 21/23 files)
+3. ✅ All blockers identified and documented
+4. ✅ Test fixtures for all advanced features
+
+## Stretch (Phase 3)
+1. ✅ All 8 failing files parse (100% of remaining)
+2. ✅ Parse rate: 65% → 95%+ (15/23 → 22/23 files)
+3. ✅ Comprehensive test coverage for edge cases
+
+# Empirical Validation
+
+## Pre-Implementation Metrics
+- Parse rate: 65% (15/23 files)
+- Files with unknown blockers: 8
+- Known feature gaps:
+  - Standalone architectures: 1 file affected
+  - Complex constants: 2 files affected
+  - Unknown issues: 5 files affected
+
+## Post-Implementation Metrics (Target)
+- Parse rate: 90%+ (21/23 files)
+- Files with unknown blockers: 0-2
+- Feature coverage:
+  - ✅ Standalone architectures supported
+  - ✅ Complex constant expressions working
+  - ✅ All common VHDL patterns handled
+
+## Investigation Findings (To be filled during implementation)
+
+### File-by-File Analysis
+
+**lumarian/lumarian.vhd:**
+- Issue: Standalone architecture
+- Root cause: Parser expects entity before architecture
+- Fix: Allow architecture-only parsing
+- Status: [PENDING]
+
+**lumarian/multiplier.vhd:**
+- Issue: Complex constant expressions
+- Root cause: [TO BE DETERMINED]
+- Fix: [TO BE DETERMINED]
+- Status: [PENDING]
+
+**mirrorbound/edge_detector.vhd:**
+- Issue: Unknown
+- Root cause: [TO BE DETERMINED]
+- Fix: [TO BE DETERMINED]
+- Status: [PENDING]
+
+[... continue for all 8 files ...]
+
+# References
+
+- Related: ADC-022 (Indexed Assignments)
+- Related: ADC-023 (TO Slice Fix)
+- Related: ADC-024 (Case Statements)
+- VHDL LRM: Section 1.2 (Design Units)
+- VHDL LRM: Section 7.2 (Constant Declarations)
+- Blocker for: 35% of LZX corpus (8/23 files)
