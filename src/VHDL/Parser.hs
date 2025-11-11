@@ -216,6 +216,7 @@ parseDirection = choice
 
 -- | Parse signal declaration
 -- Contract: spellcraft-adc-012 Section: Signal Usage Tracker
+-- ADC-IMPLEMENTS: spellcraft-adc-018
 signalDecl :: Parser SignalDecl
 signalDecl = do
   pos <- getSourcePos
@@ -223,10 +224,15 @@ signalDecl = do
   name <- identifier
   void colon
   sigType <- typeSpec
+  -- Check for optional initialization: := expression
+  initValue <- optional $ try $ do
+    void $ symbol ":="
+    parseExpression
   void semi
   pure SignalDecl
     { sigDeclName = name
     , sigDeclType = sigType
+    , sigDeclInitValue = initValue
     , sigDeclLocation = sourcePosToLocation pos
     }
 

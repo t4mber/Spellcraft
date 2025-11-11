@@ -109,9 +109,11 @@ instance ToJSON PortDirection
 
 -- | Signal declaration (e.g., "signal s_data : std_logic;")
 -- Contract: spellcraft-adc-012 Section: Signal Usage Tracker
+-- ADC-IMPLEMENTS: spellcraft-adc-018
 data SignalDecl = SignalDecl
   { sigDeclName :: Identifier
   , sigDeclType :: TypeName
+  , sigDeclInitValue :: Maybe Expression  -- Optional initialization value
   , sigDeclLocation :: SourceLocation
   } deriving (Show, Eq, Generic)
 
