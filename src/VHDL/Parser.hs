@@ -773,7 +773,8 @@ parseFunctionCallOrIndexed = try $ do
     choice
       [ try $ do
           -- Slice: downto or to keyword
-          dir <- (keyword "downto" >> pure DownTo) <|> (keyword "to" >> pure To)
+          -- Use try on "downto" to allow backtracking to "to"
+          dir <- try (keyword "downto" >> pure DownTo) <|> (keyword "to" >> pure To)
           secondExpr <- parseExpression
           pure $ Right (dir, firstExpr, secondExpr)
       , do

@@ -18,10 +18,11 @@ This directory contains VHDL test files used to validate parser features.
 - `concat_op.vhd` - Concatenation operator
 - `test_concat.vhd` - Concatenation in assignments
 
-### Slice Features (ADC-017)
+### Slice Features (ADC-017, ADC-023)
 - `simple_slice.vhd` - Basic slice syntax
 - `downto_slice.vhd` - Slice with expressions
 - `test_slice_simple.vhd` - Slice on RHS of assignment
+- `test_slice_to_failing.vhd` - Slice with TO direction + concatenation (fixed in ADC-023)
 
 ### Indexed Assignments (ADC-022)
 - `test_indexed_assign.vhd` - Array indexing on LHS: `s_array(0) <= value;`
@@ -47,10 +48,7 @@ This directory contains VHDL test files used to validate parser features.
 
 ## Known Failing Tests (Parser Issues)
 
-- `test_slice_to_failing.vhd` - Slice with TO direction + concatenation
-  - Line: `s_arr <= s_arr(0 to 6) & '0';`
-  - Issue: Parser fails on this specific combination
-  - Individual features work (slices, concat) but not together
+None currently - all test files parse successfully!
 
 ## Test Coverage Summary
 
@@ -62,7 +60,7 @@ This directory contains VHDL test files used to validate parser features.
 - ✅ Generic map expressions
 - ✅ Port map expressions
 - ✅ Indexed signal assignments
-- ✅ Slice indexing (downto)
+- ✅ Slice indexing (downto and to directions)
 - ✅ Attribute access
 - ✅ Power operator
 - ✅ Concatenation
@@ -72,9 +70,7 @@ This directory contains VHDL test files used to validate parser features.
 - ✅ Inline comments
 
 **Known Issues:**
-- ❌ Slice with TO direction in complex expressions
-- ❌ Chained indexing: `array(i)(j)`
-- ❌ Some edge case expression combinations
+- ❌ Chained indexing: `array(i)(j)` (not yet tested)
 
 ## Adding New Tests
 
