@@ -243,8 +243,9 @@ data Expression
 instance ToJSON Expression
 
 -- | Binary operators
+-- ADC-IMPLEMENTS: spellcraft-adc-019
 data BinaryOp
-  = Add | Sub | Mul | Div | Mod | Rem
+  = Add | Sub | Mul | Div | Mod | Rem | Pow  -- Pow = ** exponentiation
   | And | Or | Xor | Nand | Nor
   | Eq | NEq | Lt | Gt | LEq | GEq
   | Concat

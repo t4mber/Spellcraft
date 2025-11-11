@@ -685,8 +685,9 @@ parseExpression = parseLogicalOrExpr
 -- 3. Relational (=, /=, <, >, <=, >=)
 -- 4. Adding (+, -, &)
 -- 5. Multiplying (*, /, mod, rem)
--- 6. Unary (not, -)
--- 7. Primary (literals, identifiers, parentheses, function calls)
+-- 6. Power (**) - ADC-019
+-- 7. Unary (not, -)
+-- 8. Primary (literals, identifiers, parentheses, function calls)
 
 parseLogicalOrExpr :: Parser Expression
 parseLogicalOrExpr = parseBinaryOp parseLogicalAndExpr [("or", Or), ("nor", Nor), ("xor", Xor)]
@@ -704,9 +705,13 @@ parseAddingExpr :: Parser Expression
 parseAddingExpr = parseBinaryOp parseMultiplyingExpr [("+", Add), ("-", Sub), ("&", Concat)]
 
 parseMultiplyingExpr :: Parser Expression
-parseMultiplyingExpr = parseBinaryOp parseUnaryExpr
+parseMultiplyingExpr = parseBinaryOp parsePowerExpr
   [ ("*", Mul), ("/", Div), ("mod", Mod), ("rem", Rem)
   ]
+
+-- ADC-IMPLEMENTS: spellcraft-adc-019
+parsePowerExpr :: Parser Expression
+parsePowerExpr = parseBinaryOp parseUnaryExpr [("**", Pow)]
 
 parseUnaryExpr :: Parser Expression
 parseUnaryExpr = choice
