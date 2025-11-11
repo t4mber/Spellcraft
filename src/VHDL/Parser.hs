@@ -65,17 +65,23 @@ convertSourcePos path posState =
 data ContextItem = LibItem LibraryDeclaration | UseItem UseClause
 
 vhdlDesign :: FilePath -> Parser VHDLDesign
-vhdlDesign path = do
+vhdlDesign path = trace "vhdlDesign called" $ do
   sc  -- Consume initial whitespace/comments
   -- Parse library and use clauses (can be interleaved in VHDL-2008)
   contextItems <- many (try parseContextItem)
   let libraries = [lib | LibItem lib <- contextItems]
   let uses = [use | UseItem use <- contextItems]
+  trace ("Parsed " ++ show (length contextItems) ++ " context items") $ pure ()
   -- Parse all design units (entities and architectures intermixed)
   entities <- many (try entityDecl)
+  trace ("Parsed " ++ show (length entities) ++ " entities") $ pure ()
   sc  -- Ensure whitespace consumed before architectures
+  trace "About to parse architectures" $ pure ()
   architectures <- many (try architectureDecl)
+  trace ("Parsed " ++ show (length architectures) ++ " architectures") $ pure ()
+  trace "About to check eof" $ pure ()
   eof
+  trace "Parse complete!" $ pure ()
   pure VHDLDesign
     { designLibraries = libraries
     , designUses = uses
@@ -228,6 +234,7 @@ signalDecl = do
 -- Enhanced: spellcraft-adc-013 Section: Parser Extensions
 processStmt :: Parser ArchStatement
 processStmt = do
+  sc  -- ADC-015: Consume leading whitespace/comments
   pos <- getSourcePos
   -- Optional process label
   pName <- optional $ try (identifier <* colon)
@@ -269,14 +276,22 @@ processStmt = do
 
 -- | Parse concurrent signal assignment
 -- Enhanced: spellcraft-adc-013 Section: Expression Parsing
+-- ADC-IMPLEMENTS: spellcraft-adc-015
 concurrentAssignment :: Parser ArchStatement
-concurrentAssignment = do
+concurrentAssignment = trace "concurrentAssignment called" $ do
+  sc  -- ADC-015: Consume leading whitespace/comments
+  trace "concurrentAssignment: after sc" $ pure ()
   pos <- getSourcePos
+  trace ("concurrentAssignment: pos = " ++ show pos) $ pure ()
   target <- identifier
+  trace ("concurrentAssignment: target = " ++ show target) $ pure ()
   void $ symbol "<="
+  trace "concurrentAssignment: after <=" $ pure ()
   -- Parse expression per ADC-013
   expr <- parseExpression
+  trace ("concurrentAssignment: expr = " ++ show expr) $ pure ()
   void semi
+  trace "concurrentAssignment: success!" $ pure ()
   pure ConcurrentAssignment
     { concTarget = target
     , concExpr = expr
@@ -285,10 +300,10 @@ concurrentAssignment = do
 
 -- | Parse architecture-level statement (process, concurrent, or component)
 archStatement :: Parser ArchStatement
-archStatement = choice
-  [ try processStmt
-  , try (ComponentInstStmt <$> componentInst)
-  , try concurrentAssignment
+archStatement = trace "archStatement called" $ choice
+  [ trace "trying processStmt" $ try processStmt
+  , trace "trying componentInst" $ try (ComponentInstStmt <$> componentInst)
+  , trace "trying concurrentAssignment" $ try concurrentAssignment
   ]
 
 -- | Skip a declaration that we don't parse (constant, type, etc.)
@@ -317,25 +332,37 @@ parseDeclarations = do
 
 -- | Parse architecture declaration
 architectureDecl :: Parser Architecture
-architectureDecl = do
+architectureDecl = trace "architectureDecl called" $ do
   sc  -- Consume leading whitespace/comments
   pos <- getSourcePos
+  trace "About to parse 'architecture' keyword" $ pure ()
   void $ keyword "architecture"
+  trace "Parsed 'architecture', getting name" $ pure ()
   name <- identifier
+  trace ("Architecture name: " ++ show name) $ pure ()
   void $ keyword "of"
+  trace "Parsed 'of'" $ pure ()
   entName <- identifier
+  trace ("Entity name: " ++ show entName) $ pure ()
   void $ keyword "is"
+  trace "Parsed 'is'" $ pure ()
+  -- ADC-IMPLEMENTS: spellcraft-adc-015
   -- Parse declarations section (signals, constants, types, etc.)
   signals <- parseDeclarations
+  trace ("Parsed " ++ show (length signals) ++ " signal declarations") $ pure ()
   -- We should now be at "begin"
   void $ keyword "begin"
+  trace "Parsed 'begin'" $ pure ()
+  posAfterBegin <- getSourcePos
+  trace ("Position after 'begin': " ++ show posAfterBegin) $ pure ()
   -- Parse architecture body statements
+  -- This collects processes, concurrent assignments, and component instantiations
   statements <- many (try archStatement)
-  -- Skip body until terminating "end architecture".
-  -- NOTE: This currently only supports the explicit "end architecture" form,
-  -- not the shorthand "end <name>;" form. This is a known limitation.
-  _ <- skipManyTill anySingle
-        (try $ lookAhead $ keyword "end" >> keyword "architecture")
+  trace ("Parsed " ++ show (length statements) ++ " statements") $ pure ()
+  posAfterStmts <- getSourcePos
+  trace ("Position after statements: " ++ show posAfterStmts) $ pure ()
+  -- Now consume the "end architecture" terminator
+  -- Supports both "end architecture;" and "end architecture <name>;"
   void $ keyword "end"
   void $ optional (try $ keyword "architecture")
   void $ optional (try identifier)
@@ -350,13 +377,30 @@ architectureDecl = do
     }
 
 -- | Parse component instantiation
+-- ADC-IMPLEMENTS: spellcraft-adc-015
+-- Supports both component instantiation and direct entity instantiation:
+--   inst : component comp_name ...
+--   inst : comp_name ...
+--   inst : entity work.entity_name ...
 componentInst :: Parser ComponentInst
 componentInst = do
+  sc  -- ADC-015: Consume leading whitespace/comments
   pos <- getSourcePos
   instName <- identifier
   void colon
-  void $ optional (keyword "component")
-  compName <- identifier
+  -- Handle three forms:
+  -- 1. "component comp_name"
+  -- 2. "entity lib.entity_name"
+  -- 3. "comp_name" (bare)
+  compName <- choice
+    [ keyword "component" >> identifier
+    , do void $ keyword "entity"
+         lib <- identifier  -- library name (usually "work")
+         void $ symbol "."
+         name <- identifier  -- entity name
+         pure (lib <> "." <> name)  -- Combine as "work.entity_name"
+    , identifier  -- bare component name
+    ]
   gmap <- option [] (try genericMapClause)
   pmap <- option [] (try portMapClause)
   void semi
@@ -656,7 +700,8 @@ parseUnaryExpr = choice
 
 parsePrimaryExpr :: Parser Expression
 parsePrimaryExpr = choice
-  [ try (parens parseExpression)  -- Try parentheses first
+  [ try parseAggregate             -- ADC-015: Try aggregates first (others => ..., (x, y, z))
+  , try (parens parseExpression)  -- Then parenthesized expressions
   , try parseLiteral               -- Then literals
   , try parseFunctionCallOrIndexed -- Function calls/indexed (has '(' after identifier)
   , IdentifierExpr <$> identifier  -- Finally bare identifiers
@@ -708,19 +753,49 @@ parseIndexedName :: Parser Expression
 parseIndexedName = parseFunctionCallOrIndexed
 
 -- | Parse aggregate (array literal)
--- Note: This is for aggregates like (others => '0'), not simple parentheses
--- Simple parentheses are handled by (parens parseExpression) in parsePrimaryExpr
+-- ADC-IMPLEMENTS: spellcraft-adc-015
+-- Handles aggregates like (others => '0'), (1, 2, 3), (x => 1, y => 2)
+-- Note: Must be tried before (parens parseExpression) to catch => syntax
 parseAggregate :: Parser Expression
 parseAggregate = do
   void $ symbol "("
-  -- An aggregate must have either "others =>" or multiple elements
-  exprs <- parseExpression `sepBy` comma
+  -- Try to parse aggregate elements
+  -- Aggregates can be:
+  --   (others => value)
+  --   (index => value, ...)
+  --   (value, value, ...)
+  --
+  -- We detect aggregates by looking for "=>" or multiple comma-separated values
+
+  -- Try aggregate with =>
+  firstElem <- try $ do
+    key <- choice [keyword "others" >> pure (IdentifierExpr "others"), parseExpression]
+    hasArrow <- optional (symbol "=>")
+    case hasArrow of
+      Just _ -> do
+        val <- parseExpression
+        pure $ BinaryExpr Eq key val  -- Reuse Eq operator to represent =>
+      Nothing -> pure key  -- Just a value
+
+  -- Parse remaining elements
+  restElems <- many $ try $ do
+    void comma
+    key <- choice [keyword "others" >> pure (IdentifierExpr "others"), parseExpression]
+    hasArrow <- optional (symbol "=>")
+    case hasArrow of
+      Just _ -> do
+        val <- parseExpression
+        pure $ BinaryExpr Eq key val
+      Nothing -> pure key
+
   void $ symbol ")"
-  -- If it's just one expression in parens, it's not an aggregate
-  -- This should not be reached because parens parseExpression comes first
-  case exprs of
-    [single] -> pure single
-    multiple -> pure $ Aggregate multiple
+
+  let allElems = firstElem : restElems
+  -- If single element without =>, treat as parenthesized expression
+  case allElems of
+    [single@(BinaryExpr Eq _ _)] -> pure $ Aggregate [single]  -- (others => x) is aggregate
+    [single] -> pure single  -- (x) is just parentheses
+    multiple -> pure $ Aggregate multiple  -- Multiple elements is aggregate
 
 -- | Parse literal
 parseLiteral :: Parser Expression

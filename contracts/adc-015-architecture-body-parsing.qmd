@@ -1,0 +1,284 @@
+---
+title: "ADC-015: Architecture Body Statement Parsing"
+id: spellcraft-adc-015
+version: 1.0.0
+status: active
+priority: critical
+created: 2025-11-10
+---
+
+## Purpose
+
+Fix critical parser bug where architecture bodies parse successfully but produce empty `archStatements` lists, preventing signal usage analysis and violation detection from working.
+
+**Business Impact:** This bug makes violation detection completely non-functional on real VHDL files, rendering the tool unusable for its primary purpose.
+
+## Problem Statement
+
+### Current Behavior
+- Files parse with 0 errors
+- Architecture is created in AST
+- `archStatements` field is always empty `[]`
+- Signal assignments, processes, and component instantiations are lost
+
+### Example
+```vhdl
+architecture rtl of enhance is
+  signal s_input : signed(11 downto 0);
+begin
+  process(clk)
+  begin
+    if rising_edge(clk) then
+      s_input <= resize(a, 12);  -- This assignment is lost!
+    end if;
+  end process;
+
+  result <= s_input;  -- This concurrent assignment is lost!
+end architecture;
+```
+
+**Expected:** `archStatements` contains process + concurrent assignment
+**Actual:** `archStatements = []`
+
+### Impact
+- ❌ Signal usage analysis finds 0 assignments
+- ❌ All signals reported as "undriven" (100% false positive rate)
+- ❌ Tool unusable in production
+- ❌ Blocks ADC-012 (violation detection)
+- ❌ Blocks v0.4.0 release
+
+## Root Cause Analysis
+
+### Parser Structure Issue
+
+The architecture parser likely:
+1. ✅ Parses architecture header (`architecture rtl of entity is`)
+2. ✅ Parses signal declarations
+3. ✅ Consumes `begin` keyword
+4. ❌ **FAILS to collect statements between `begin` and `end architecture`**
+5. ✅ Consumes `end architecture;`
+
+### Hypothesis: Statement Collection Not Wired Up
+
+The parser may be:
+- Parsing statements but not storing them in `archStatements`
+- Skipping the statement parsing phase entirely
+- Using wrong combinator that discards parsed results
+
+## Requirements
+
+### FR-1: Parse Architecture Statements
+**Priority:** Critical
+**Contract:** ADC-015
+
+The parser MUST collect all statements in the architecture body between `begin` and `end architecture`.
+
+**Acceptance Criteria:**
+- ✅ Process statements captured in `archStatements`
+- ✅ Concurrent assignments captured in `archStatements`
+- ✅ Component instantiations captured in `archStatements`
+- ✅ Statement order preserved
+- ✅ Location information accurate
+
+### FR-2: Maintain Parse Success Rate
+**Priority:** High
+**Contract:** ADC-015
+
+The fix MUST NOT introduce regressions in files that currently parse successfully.
+
+**Acceptance Criteria:**
+- ✅ All existing tests continue passing
+- ✅ Simple test cases still work
+- ✅ No new parse errors introduced
+
+## Implementation Strategy
+
+### Option 1: Debug Existing Parser (RECOMMENDED)
+
+**Approach:** Investigate why current parser isn't populating `archStatements`
+
+**Steps:**
+1. Add debug traces to architecture parser
+2. Identify where statements should be collected
+3. Fix statement collection logic
+4. Test on simple and complex examples
+
+**Pros:**
+- Minimal code changes
+- Preserves existing structure
+- Quick fix
+
+**Cons:**
+- May reveal deeper architectural issues
+
+### Option 2: Refactor with Applicative Style
+
+**Approach:** Rewrite architecture parser using clearer applicative syntax
+
+**Example:**
+```haskell
+-- Current (monadic - harder to trace):
+architecture = do
+  header <- parseArchHeader
+  signals <- many parseSignal
+  void $ keyword "begin"
+  stmts <- many archStatement  -- Are these being stored?
+  void $ keyword "end"
+  pure Architecture { archStatements = stmts, ... }
+
+-- Proposed (applicative - clearer data flow):
+architecture =
+  Architecture
+    <$> parseArchHeader
+    <*> many parseSignal
+    <*> (keyword "begin" *> many archStatement <* keyword "end")
+    <*> sourceLocation
+```
+
+**Pros:**
+- Clearer data flow
+- Easier to debug
+- More maintainable
+- User suggested "syntax sugar" might help
+
+**Cons:**
+- Larger refactor
+- More testing needed
+- May introduce temporary regressions
+
+### Option 3: Hybrid Approach
+
+**Approach:** Debug first, then refactor problem areas
+
+**Steps:**
+1. Add comprehensive debug output
+2. Identify exact failure point
+3. Fix minimal code to unblock
+4. Refactor to applicative style for clarity
+5. Validate no regressions
+
+**Pros:**
+- Best of both worlds
+- Incremental risk
+- Learning opportunity
+
+## Success Metrics
+
+### Quantitative
+- **Statement Collection Rate:** 0% → 100%
+- **False Positive Rate:** 100% → <10%
+- **Test Pass Rate:** Maintain 100%
+- **Parse Success Rate:** Maintain current level
+
+### Qualitative
+- ✅ Level 1 Kaos Brownie example detects only `THIS_SIGNAL_IS_NEVER_USED`
+- ✅ Signals assigned in processes not reported as undriven
+- ✅ Component outputs properly tracked
+- ✅ Clear error messages if parsing fails
+
+## Test Plan
+
+### Unit Tests
+```haskell
+describe "Architecture Body Parsing" $ do
+  it "collects process statements" $ do
+    result <- parseVHDL "test/fixtures/simple_process.vhd"
+    length (archStatements $ head $ designArchitectures result) `shouldBe` 2
+
+  it "collects concurrent assignments" $ do
+    result <- parseVHDL "test/fixtures/concurrent.vhd"
+    let stmts = archStatements $ head $ designArchitectures result
+    any isConcurrentAssignment stmts `shouldBe` True
+
+  it "collects component instantiations" $ do
+    result <- parseVHDL "test/fixtures/components.vhd"
+    let stmts = archStatements $ head $ designArchitectures result
+    any isComponentInst stmts `shouldBe` True
+```
+
+### Integration Tests
+```bash
+# Level 1 Kaos Brownie - should detect 1 violation (not 13!)
+spellcraft contrib/lzx-kaos-levels/enhance-level1-undriven.vhd
+# Expected: 1 error (THIS_SIGNAL_IS_NEVER_USED only)
+# Actual before fix: 13 errors (all signals)
+
+# Simple process - should detect 0 violations
+spellcraft test/fixtures/simple_process.vhd
+# Expected: 0 errors
+# Actual: Already working ✅
+```
+
+## Parity
+
+### Files to Modify
+- `src/VHDL/Parser.hs` - Architecture parser implementation
+  - Function: `architecture` or `parseArchitecture`
+  - Add: Statement collection logic
+  - Fix: `archStatements` population
+
+### Files to Review
+- `src/VHDL/AST.hs` - Architecture type definition
+- `src/VHDL/Analysis/SignalUsage.hs` - Verify works once statements present
+
+### New Files (Optional)
+- `test/fixtures/architecture_statements.vhd` - Comprehensive test case
+- `docs/parser-architecture.md` - Document parser structure
+
+## Dependencies
+
+### Blocks
+- ADC-012 Priority 1 (Signal Usage Detection) - BLOCKED by this bug
+- v0.4.0 Release - BLOCKED by this bug
+
+### Blocked By
+- None - this is the critical path blocker
+
+### Related
+- ADC-013 (Process Parsing) - Recently fixed, exposed this bug
+- ADC-001 (VHDL Parser) - Original parser contract
+
+## Risks
+
+### High Risk: Parser Complexity
+**Mitigation:** Use comprehensive debug output and incremental testing
+
+### Medium Risk: Syntax Sugar Refactor
+**Mitigation:** Preserve existing behavior, add tests first
+
+### Low Risk: Performance Impact
+**Mitigation:** Profile if concerns arise
+
+## Timeline
+
+### Immediate (Hour 1)
+1. Add debug traces to architecture parser
+2. Identify where statements should be collected
+3. Fix statement collection bug
+
+### Short Term (Hour 2-3)
+4. Test on all Kaos Brownie examples
+5. Verify false positive rate drops
+6. Run full test suite
+
+### Optional (Hour 4+)
+7. Refactor to applicative style if user prefers
+8. Document parser structure
+9. Add comprehensive tests
+
+## Deliverables
+
+1. ✅ Architecture statements properly collected
+2. ✅ Signal usage analysis functional
+3. ✅ Level 1 Kaos Brownie detection working
+4. ✅ All tests passing
+5. ✅ Debug traces showing statement counts
+6. 📖 (Optional) Parser documentation with clearer syntax
+
+## Notes
+
+**User Preference:** User suggested exploring "different syntax sugar" to make parser easier to understand. This suggests applicative style might be preferred over monadic do-notation for clarity.
+
+**Current Status:** Parser recursion bug fixed (ADC-013), but exposed this deeper issue where architecture bodies aren't being collected at all.
+
+**Next Action:** Investigate architecture parser, add debug output, identify exact failure point.
