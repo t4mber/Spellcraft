@@ -38,8 +38,9 @@ This directory contains VHDL test files used to validate parser features.
 - `test_var_assign.vhd` - Variable assignments (`:=`)
 - `test_for_loop.vhd` - For loops
 
-### Statement Features
+### Statement Features (ADC-024)
 - `inline_comment.vhd` - Inline comments after statements
+- `test_case.vhd` - Case statements with multiple when clauses
 
 ### Complex Expressions
 - `constant_in_expr.vhd` - Constants in expressions
@@ -67,6 +68,7 @@ None currently - all test files parse successfully!
 - ✅ Process with variables
 - ✅ For loops
 - ✅ Variable assignments
+- ✅ Case statements with literal and 'others' choices
 - ✅ Inline comments
 
 **Known Issues:**

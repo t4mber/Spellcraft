@@ -582,7 +582,9 @@ parseIfStatement = do
     endOrElse = choice [keyword "elsif", keyword "else", keyword "end"]
 
 -- | Parse case statement
--- Contract: spellcraft-adc-013 Section: Parser Extensions
+-- ADC-IMPLEMENTS: spellcraft-adc-024
+-- Fixed: Use parseLiteral instead of parseExpression for when clause choices
+-- Issue: parseExpression was failing on character/bit literals in this context
 parseCaseStatement :: Parser Statement
 parseCaseStatement = do
   pos <- getSourcePos
@@ -601,7 +603,11 @@ parseCaseStatement = do
   where
     parseWhenClause = do
       void $ keyword "when"
-      choice <- parseExpression <|> (keyword "others" >> pure (IdentifierExpr "others"))
+      -- Parse choice: try literal first (for '0', "000", etc.),
+      -- then 'others' keyword, finally identifiers
+      choice <- try parseLiteral
+          <|> (try (keyword "others") >> pure (IdentifierExpr "others"))
+          <|> (IdentifierExpr <$> identifier)
       void $ symbol "=>"
       stmts <- many (try (notFollowedBy nextWhenOrEnd >> parseSequentialStatement))
       pure (choice, stmts)
