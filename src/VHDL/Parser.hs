@@ -104,8 +104,11 @@ parseContextItem = try (LibItem <$> parseLibraryDeclaration) <|> try (UseItem <$
 -- | Parse a single design unit (entity or architecture in any order)
 -- This allows standalone architecture files without entities
 parseDesignUnit :: Parser DesignUnit
-parseDesignUnit =
-  try (EntityUnit <$> entityDecl) <|> try (ArchUnit <$> architectureDecl)
+parseDesignUnit = trace "parseDesignUnit ENTER" $ do
+  result <- try (trace "parseDesignUnit: trying entity" $ EntityUnit <$> entityDecl)
+        <|> try (trace "parseDesignUnit: trying architecture" $ ArchUnit <$> architectureDecl)
+  trace ("parseDesignUnit: SUCCESS - got " ++ show (case result of EntityUnit _ -> "entity"; ArchUnit _ -> "architecture")) $ pure ()
+  pure result
 
 -- | Parse library declaration (e.g., "library work;")
 -- Contract: spellcraft-adc-008 Section: Implementation
@@ -328,12 +331,25 @@ archStatement = trace "archStatement called" $ choice
   ]
 
 -- | Skip a declaration that we don't parse (constant, type, etc.)
+-- ADC-IMPLEMENTS: spellcraft-adc-025
 skipDeclaration :: Parser ()
 skipDeclaration = do
   -- Try to match and skip: constant, type, subtype, component, function, procedure, etc.
   choice
     [ try (keyword "constant" >> skipTo (void semi))
-    , try (keyword "type" >> skipTo (void semi))
+    , try $ do
+        -- Handle record types specially: type name is record ... end record;
+        void $ keyword "type"
+        void identifier  -- type name
+        void $ keyword "is"
+        -- Check if this is a record type
+        choice
+          [ try $ do
+              void $ keyword "record"
+              -- Skip until "end record;"
+              skipTo (keyword "end" >> keyword "record" >> void semi)
+          , skipTo (void semi)  -- Other type declarations end with semicolon
+          ]
     , try (keyword "subtype" >> skipTo (void semi))
     , try (keyword "component" >> skipTo (keyword "end" >> keyword "component" >> void semi))
     , try (keyword "function" >> skipTo (keyword "end" >> optional (keyword "function") >> void semi))
@@ -384,10 +400,12 @@ architectureDecl = trace "architectureDecl called" $ do
   trace ("Position after statements: " ++ show posAfterStmts) $ pure ()
   -- Now consume the "end architecture" terminator
   -- Supports both "end architecture;" and "end architecture <name>;"
-  void $ keyword "end"
-  void $ optional (try $ keyword "architecture")
-  void $ optional (try identifier)
-  void semi
+  trace "architectureDecl: parsing 'end' keyword" $ void $ keyword "end"
+  trace "architectureDecl: parsed 'end'" $ pure ()
+  trace "architectureDecl: parsing optional 'architecture' keyword" $ void $ optional (try $ keyword "architecture")
+  trace "architectureDecl: parsing optional identifier" $ void $ optional (try identifier)
+  trace "architectureDecl: parsing semicolon" $ void semi
+  trace "architectureDecl: SUCCESS! Creating Architecture record" $ pure ()
   pure Architecture
     { archName = name
     , archEntityName = entName
@@ -399,34 +417,46 @@ architectureDecl = trace "architectureDecl called" $ do
 
 -- | Parse component instantiation
 -- ADC-IMPLEMENTS: spellcraft-adc-015
+-- ADC-IMPLEMENTS: spellcraft-adc-025
 -- Supports both component instantiation and direct entity instantiation:
 --   inst : component comp_name ...
 --   inst : comp_name ...
 --   inst : entity work.entity_name ...
 componentInst :: Parser ComponentInst
-componentInst = do
+componentInst = trace "componentInst ENTER" $ do
   sc  -- ADC-015: Consume leading whitespace/comments
   pos <- getSourcePos
-  instName <- identifier
-  void colon
+  trace ("componentInst: pos = " ++ show pos) $ pure ()
+  instName <- trace "componentInst: parsing instName" $ identifier
+  trace ("componentInst: instName = " ++ show instName) $ pure ()
+  trace "componentInst: parsing colon" $ void colon
+  trace "componentInst: colon parsed" $ pure ()
   -- Handle three forms:
   -- 1. "component comp_name"
   -- 2. "entity lib.entity_name"
   -- 3. "comp_name" (bare)
   -- IMPORTANT: Each alternative must use 'try' because 'keyword' consumes input before checking
-  compName <- choice
-    [ try (keyword "component" >> identifier)
-    , try $ do
-         void $ keyword "entity"
+  compName <- trace "componentInst: parsing compName" $ choice
+    [ trace "componentInst: trying 'component'" $ try (keyword "component" >> identifier)
+    , trace "componentInst: trying 'entity lib.name'" $ try $ do
+         trace "componentInst: parsing 'entity' keyword" $ void $ keyword "entity"
+         trace "componentInst: parsed 'entity', getting lib" $ pure ()
          lib <- identifier  -- library name (usually "work")
-         void $ symbol "."
+         trace ("componentInst: lib = " ++ show lib) $ pure ()
+         trace "componentInst: parsing dot" $ void $ symbol "."
+         trace "componentInst: parsed dot, getting name" $ pure ()
          name <- identifier  -- entity name
+         trace ("componentInst: entity name = " ++ show name) $ pure ()
          pure (lib <> "." <> name)  -- Combine as "work.entity_name"
-    , identifier  -- bare component name
+    , trace "componentInst: trying bare identifier" $ identifier  -- bare component name
     ]
-  gmap <- option [] (try genericMapClause)
-  pmap <- option [] (try portMapClause)
-  void semi
+  trace ("componentInst: compName = " ++ show compName) $ pure ()
+  gmap <- trace "componentInst: parsing generic map" $ option [] (try genericMapClause)
+  trace ("componentInst: gmap has " ++ show (length gmap) ++ " entries") $ pure ()
+  pmap <- trace "componentInst: parsing port map" $ option [] (try portMapClause)
+  trace ("componentInst: pmap has " ++ show (length pmap) ++ " entries") $ pure ()
+  trace "componentInst: parsing semicolon" $ void semi
+  trace "componentInst: SUCCESS!" $ pure ()
   pure ComponentInst
     { compInstName = instName
     , compComponentName = compName
@@ -445,11 +475,15 @@ genericMapClause = do
 
 -- | Parse port map
 -- ADC-IMPLEMENTS: spellcraft-adc-021
+-- ADC-IMPLEMENTS: spellcraft-adc-025
 portMapClause :: Parser [(Identifier, Expression)]
-portMapClause = do
-  void $ keyword "port"
-  void $ keyword "map"
-  parens (portAssociation `sepBy` comma)
+portMapClause = trace "portMapClause ENTER" $ do
+  trace "portMapClause: parsing 'port' keyword" $ void $ keyword "port"
+  trace "portMapClause: parsing 'map' keyword" $ void $ keyword "map"
+  trace "portMapClause: parsing parens with associations" $ pure ()
+  result <- parens (portAssociation `sepBy` comma)
+  trace ("portMapClause: parsed " ++ show (length result) ++ " associations") $ pure ()
+  pure result
 
 -- | Parse generic association (name => expression)
 -- ADC-IMPLEMENTS: spellcraft-adc-020
@@ -463,12 +497,16 @@ association = do
 
 -- | Parse port association (name => expression)
 -- ADC-IMPLEMENTS: spellcraft-adc-021
+-- ADC-IMPLEMENTS: spellcraft-adc-025
 -- Changed from identifier to Expression to support complex port connections like function calls
 portAssociation :: Parser (Identifier, Expression)
-portAssociation = do
-  name <- identifier
-  void $ symbol "=>"
+portAssociation = trace "portAssociation ENTER" $ do
+  name <- trace "portAssociation: parsing name" $ identifier
+  trace ("portAssociation: name = " ++ show name) $ pure ()
+  trace "portAssociation: parsing =>" $ void $ symbol "=>"
+  trace "portAssociation: parsing expression" $ pure ()
   expr <- parseExpression  -- Changed from 'identifier' to 'parseExpression'
+  trace ("portAssociation: expr = " ++ show expr) $ pure ()
   pure (name, expr)
 
 -- | Parse value

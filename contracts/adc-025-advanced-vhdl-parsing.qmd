@@ -283,24 +283,79 @@ For each unknown blocker:
 ### File-by-File Analysis
 
 **lumarian/lumarian.vhd:**
-- Issue: Standalone architecture
-- Root cause: Parser expects entity before architecture
-- Fix: Allow architecture-only parsing
-- Status: [PENDING]
+- Issue 1: Standalone architecture (Phase 1 - FIXED)
+- Issue 2: Record type declarations in architecture
+- Issue 3: Record field access with dot notation (data_in.avid)
+- Root cause 1: Parser expected entity before architecture - FIXED by DesignUnit sum type
+- Root cause 2: `skipDeclaration` stopped at first semicolon in `type...record...end record;` - FIXED
+- Root cause 3: `parseExpression` doesn't support selected names (dot notation for record field access)
+- Fix 1: ✅ Implemented flexible design unit parsing (ADC-025 Phase 1)
+- Fix 2: ✅ Updated `skipDeclaration` to handle record types properly
+- Fix 3: ⏳ REQUIRED: Add selected name support to expression parser (identifier.field.subfield)
+- Status: BLOCKED on record field access parsing (causes infinite loop)
+- Files created: test/fixtures/test_standalone_arch.vhd, test/fixtures/test_record_type.vhd, test/fixtures/test_portmap_record_field.vhd
 
 **lumarian/multiplier.vhd:**
 - Issue: Complex constant expressions
-- Root cause: [TO BE DETERMINED]
-- Fix: [TO BE DETERMINED]
+- Root cause: Likely also uses record types or other advanced features
+- Fix: [TO BE DETERMINED after lumarian.vhd is fixed]
 - Status: [PENDING]
 
 **mirrorbound/edge_detector.vhd:**
+- Issue: Unknown
+- Root cause: Likely record types or selected names based on lumarian.vhd patterns
+- Fix: [TO BE DETERMINED]
+- Status: [PENDING]
+
+**mirrorbound/mirror_delay_line_slv.vhd:**
 - Issue: Unknown
 - Root cause: [TO BE DETERMINED]
 - Fix: [TO BE DETERMINED]
 - Status: [PENDING]
 
-[... continue for all 8 files ...]
+**mirrorbound/mirrorbound.vhd:**
+- Issue: Unknown
+- Root cause: Likely similar to lumarian.vhd (standalone arch + record types)
+- Fix: [TO BE DETERMINED]
+- Status: [PENDING]
+
+**mirrorbound/multiplier.vhd:**
+- Issue: Complex constant expressions
+- Root cause: [TO BE DETERMINED]
+- Fix: [TO BE DETERMINED]
+- Status: [PENDING]
+
+**mirrorbound/video_timing_accumulator.vhd:**
+- Issue: Unknown
+- Root cause: [TO BE DETERMINED]
+- Fix: [TO BE DETERMINED]
+- Status: [PENDING]
+
+**mirrorbound/video_timing_generator.vhd:**
+- Issue: Unknown
+- Root cause: [TO BE DETERMINED]
+- Fix: [TO BE DETERMINED]
+- Status: [PENDING]
+
+### Phase 2 Progress Summary
+
+**Investigation Method:**
+1. ✅ Added comprehensive tracing to componentInst, portMapClause, portAssociation, architectureDecl
+2. ✅ Created minimal test cases to isolate issues
+3. ✅ Identified root causes through systematic debugging
+
+**Discoveries:**
+1. ✅ Record type declarations were causing parse to stop mid-declaration
+2. ✅ Parser enters infinite loop when encountering selected names (dot notation)
+3. ⏳ Need to add SelectedName expression type and parser
+4. ⏳ Record field access is blocking 8 files (likely affects multiple files in corpus)
+
+**Next Steps (ADC-026):**
+1. Create ADC-026 contract for selected name support
+2. Add SelectedName to Expression AST
+3. Modify parsePrimaryExpr to handle dot notation after identifiers
+4. Test with lumarian.vhd and other corpus files
+5. Target: Unblock 6+ of 8 remaining files
 
 # References
 
