@@ -13,6 +13,7 @@ module VHDL.Parser
 
 import Control.Monad (void, when)
 import Data.Aeson (ToJSON)
+import Data.Char (isAlpha)
 import Data.Maybe (catMaybes, isJust)
 import Data.Text (Text)
 import qualified Data.Text as T
@@ -466,43 +467,53 @@ sourcePosToLocation pos = SourceLocation
 -- | Parse a single sequential statement
 -- Contract: spellcraft-adc-013 Section: Parser Extensions
 parseSequentialStatement :: Parser Statement
-parseSequentialStatement = do
+parseSequentialStatement = trace "parseSequentialStatement called" $ do
   sc  -- Consume leading whitespace
+  trace "parseSequentialStatement: after sc" $ pure ()
+  posAfterSc <- getSourcePos
+  trace ("parseSequentialStatement: position = " ++ show posAfterSc) $ pure ()
   -- Try to parse different statement types
   choice
-    [ try parseSignalAssignment
-    , try parseVariableAssignment
-    , try parseIfStatement
-    , try parseCaseStatement
-    , try parseLoopStatement
-    , try parseWaitStatement
-    , try parseNullStatement
+    [ trace "Trying parseSignalAssignment" $ try parseSignalAssignment
+    , trace "Trying parseVariableAssignment" $ try parseVariableAssignment
+    , trace "Trying parseIfStatement" $ try parseIfStatement
+    , trace "Trying parseCaseStatement" $ try parseCaseStatement
+    , trace "Trying parseLoopStatement" $ try parseLoopStatement
+    , trace "Trying parseWaitStatement" $ try parseWaitStatement
+    , trace "Trying parseNullStatement" $ try parseNullStatement
     ]
 
 -- | Parse sequential statements inside process
 -- Contract: spellcraft-adc-013 Section: Parser Extensions
 parseSequentialStatements :: Parser [Statement]
-parseSequentialStatements = do
+parseSequentialStatements = trace "parseSequentialStatements called" $ do
   -- Parse statements until we see "end process"
   -- We need to check for "end" followed by "process" to avoid stopping at "end if", "end case", etc.
-  let go = do
+  let go = trace "go: checking for end process" $ do
         -- Try to match "end process" with lookAhead
-        atEnd <- (lookAhead $ try $ do
+        atEnd <- (trace "go: trying lookAhead for 'end process'" $ lookAhead $ try $ do
           keyword "end"
+          trace "go: found 'end', checking for 'process'" $ pure ()
           keyword "process"
-          pure True) <|> pure False
+          trace "go: found 'end process'!" $ pure ()
+          pure True) <|> (trace "go: no 'end process' found" $ pure False)
 
+        trace ("go: atEnd = " ++ show atEnd) $ pure ()
         if atEnd
-          then pure []
+          then trace "go: stopping (found end process)" $ pure []
           else do
-            stmtResult <- (Just <$> parseSequentialStatement) <|> pure Nothing
+            trace "go: trying to parse statement" $ pure ()
+            stmtResult <- (Just <$> parseSequentialStatement) <|> (trace "go: statement parse failed" $ pure Nothing)
             case stmtResult of
-              Nothing -> pure []
+              Nothing -> trace "go: no statement, stopping" $ pure []
               Just stmt -> do
+                trace ("go: parsed statement, recursing") $ pure ()
                 rest <- go
                 pure (stmt : rest)
 
-  go
+  stmts <- go
+  trace ("parseSequentialStatements: parsed " ++ show (length stmts) ++ " statements") $ pure ()
+  pure stmts
 
 -- | Parse signal assignment statement
 -- Contract: spellcraft-adc-013 Section: Parser Extensions
@@ -699,13 +710,36 @@ parseUnaryExpr = choice
   ]
 
 parsePrimaryExpr :: Parser Expression
-parsePrimaryExpr = choice
-  [ try parseAggregate             -- ADC-015: Try aggregates first (others => ..., (x, y, z))
-  , try (parens parseExpression)  -- Then parenthesized expressions
-  , try parseLiteral               -- Then literals
-  , try parseFunctionCallOrIndexed -- Function calls/indexed (has '(' after identifier)
-  , IdentifierExpr <$> identifier  -- Finally bare identifiers
-  ]
+parsePrimaryExpr = do
+  -- ADC-IMPLEMENTS: spellcraft-adc-016
+  -- Parse base expression, then check for postfix attributes
+  base <- choice
+    [ try parseAggregate             -- ADC-015: Try aggregates first (others => ..., (x, y, z))
+    , try (parens parseExpression)  -- Then parenthesized expressions
+    , try parseLiteral               -- Then literals
+    , try parseFunctionCallOrIndexed -- Function calls/indexed (has '(' after identifier)
+    , IdentifierExpr <$> identifier  -- Finally bare identifiers
+    ]
+  -- Check for attributes (postfix 'attribute_name or 'attribute_name(params))
+  parseAttributes base
+
+-- ADC-IMPLEMENTS: spellcraft-adc-016
+-- | Parse attribute access as postfix operator
+-- Handles: signal'event, arr'length, type'image(value), arr(i)'length
+parseAttributes :: Expression -> Parser Expression
+parseAttributes base = do
+  attrs <- many $ try $ do
+    -- Need apostrophe followed by identifier (not another apostrophe for char literal)
+    void $ char '\''
+    -- Look ahead to ensure it's an identifier, not a closing quote for char literal
+    lookAhead $ satisfy (\c -> isAlpha c || c == '_')
+    attrName <- identifier
+    -- Check for parameterized attribute: 'image(value)
+    params <- option [] $ try $ parens $ parseExpression `sepBy` comma
+    pure (attrName, params)
+
+  -- Build nested AttributeExpr for each attribute (supports chaining)
+  pure $ foldl (\acc (name, params) -> AttributeExpr acc name params) base attrs
 
 -- | Parse binary operators with left associativity
 parseBinaryOp :: Parser Expression -> [(Text, BinaryOp)] -> Parser Expression
@@ -808,16 +842,18 @@ parseLiteral = LiteralExpr <$> choice
   ]
 
 -- | Parse bit literal ('0' or '1')
+-- ADC-IMPLEMENTS: spellcraft-adc-015
 parseBitLiteral :: Parser Literal
-parseBitLiteral = do
+parseBitLiteral = lexeme $ do
   void $ char '\''
   bit <- satisfy (\c -> c == '0' || c == '1')
   void $ char '\''
   pure $ BitLiteral (bit == '1')
 
 -- | Parse character literal
+-- ADC-IMPLEMENTS: spellcraft-adc-015
 parseCharLiteral :: Parser Literal
-parseCharLiteral = do
+parseCharLiteral = lexeme $ do
   void $ char '\''
   c <- anySingle
   void $ char '\''

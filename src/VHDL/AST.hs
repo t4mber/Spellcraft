@@ -217,8 +217,9 @@ data Value
 
 instance ToJSON Value
 
--- | VHDL Expressions (according to ADC-013)
+-- | VHDL Expressions (according to ADC-013, ADC-016)
 -- Contract: spellcraft-adc-013 Section: AST Extensions
+-- Contract: spellcraft-adc-016 Section: AST Extensions
 data Expression
   = IdentifierExpr Identifier
   | LiteralExpr Literal
@@ -227,6 +228,9 @@ data Expression
   | FunctionCall Identifier [Expression]
   | IndexedName Expression Expression
   | Aggregate [Expression]
+  -- ADC-IMPLEMENTS: spellcraft-adc-016
+  -- Attribute access: signal'event, arr'length, type'image(value)
+  | AttributeExpr Expression Identifier [Expression]
   deriving (Show, Eq, Generic)
 
 instance ToJSON Expression

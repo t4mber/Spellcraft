@@ -1,0 +1,349 @@
+---
+title: "ADC-017: VHDL Slice and Range Indexing"
+id: spellcraft-adc-017
+version: 1.0.0
+status: active
+priority: critical
+created: 2025-11-10
+---
+
+## Purpose
+
+Implement VHDL slice and range indexing syntax (`signal(high downto low)`, `signal(low to high)`) to enable parsing of real VHDL designs. Currently only single-index access (`signal(i)`) is supported.
+
+**Business Impact:** Slice indexing is used in ~90% of VHDL designs for bit vector manipulation. Without this feature, the parser cannot handle production code.
+
+## Problem Statement
+
+### Current Behavior
+- Single index works: `signal(5)` ✅
+- Range index fails: `signal(7 downto 0)` ❌
+- Ascending range fails: `signal(0 to 7)` ❌
+- Parser reports "unexpected end of input" when encountering `downto`/`to` keywords
+
+### Example Failures
+```vhdl
+-- Fails: Slice in assignment
+data_out <= data_in(7 downto 0);
+
+-- Fails: Slice in expression
+s_cutoff <= unsigned(cutoff(C_FRAC_BITS - 1 downto 0));
+
+-- Fails: Slice with attribute
+signal_slice <= data(3 downto 0) & padding;
+
+-- Fails: Ascending slice
+reverse_data <= original(0 to 7);
+```
+
+**Expected:** Parse successfully and capture range bounds in AST
+**Actual:** Parse error at `downto`/`to` keyword
+
+### Impact
+- ❌ 100% of LZX corpus uses slices
+- ❌ Blocks v0.4.0 release (requires 90%+ parse rate)
+- ❌ Makes tool unusable on real VHDL code
+
+## VHDL Slice Syntax
+
+### Slice Types
+
+1. **Descending Range** (most common):
+   ```vhdl
+   signal(high downto low)
+   data_bus(31 downto 24)  -- Upper byte
+   ```
+
+2. **Ascending Range**:
+   ```vhdl
+   signal(low to high)
+   array_data(0 to 7)  -- Ascending indices
+   ```
+
+3. **Dynamic Slices**:
+   ```vhdl
+   data(start_idx + 3 downto start_idx)
+   buffer(offset*8 + 7 downto offset*8)
+   ```
+
+### Difference from Single Indexing
+
+- **Single index**: `signal(5)` - returns single bit/element
+- **Slice**: `signal(7 downto 0)` - returns sub-vector/sub-array
+
+## Requirements
+
+### FR-1: Parse Descending Slices
+**Priority:** Critical
+**Contract:** ADC-017
+
+Parser MUST support `signal(high downto low)` syntax.
+
+**Acceptance Criteria:**
+- ✅ Parse constant indices: `data(7 downto 0)`
+- ✅ Parse expression indices: `data(width-1 downto 0)`
+- ✅ Parse complex expressions: `buffer(offset*8+7 downto offset*8)`
+- ✅ Capture both bounds as expressions in AST
+
+### FR-2: Parse Ascending Slices
+**Priority:** High
+**Contract:** ADC-017
+
+Parser MUST support `signal(low to high)` syntax.
+
+**Acceptance Criteria:**
+- ✅ Parse ascending slices: `data(0 to 7)`
+- ✅ Distinguish from descending slices in AST
+- ✅ Support in all expression contexts
+
+### FR-3: Differentiate from Function Calls
+**Priority:** Critical
+**Contract:** ADC-017
+
+Parser MUST distinguish between:
+- Function call with 2 args: `func(a, b)`
+- Slice: `signal(a downto b)`
+
+**Acceptance Criteria:**
+- ✅ Comma-separated → function call
+- ✅ `downto`/`to` keyword → slice
+- ✅ Single expression → could be either (currently function call)
+
+## Implementation Strategy
+
+### Option 1: Extend IndexedName to Support Ranges (RECOMMENDED)
+
+**Approach:** Add range variant to `IndexedName` or create new `SliceExpr` constructor
+
+**AST Changes:**
+```haskell
+data Expression
+  = -- ... existing constructors
+  | IndexedName Expression Expression  -- Single index
+  | SliceExpr Expression Expression Expression SliceDirection  -- NEW
+  deriving (Show, Eq, Generic)
+
+data SliceDirection = DownTo | To
+  deriving (Show, Eq, Generic)
+```
+
+**Parser Changes:**
+```haskell
+-- Update parseFunctionCallOrIndexed to detect downto/to
+parseFunctionCallOrIndexed :: Parser Expression
+parseFunctionCallOrIndexed = try $ do
+  name <- identifier
+  result <- parens $ do
+    firstExpr <- parseExpression
+    -- Check what comes next
+    choice
+      [ do -- Slice: downto or to
+           dir <- (keyword "downto" >> pure DownTo) <|> (keyword "to" >> pure To)
+           secondExpr <- parseExpression
+           pure $ Right (dir, firstExpr, secondExpr)
+      , do -- Function call: comma-separated args
+           rest <- many $ try $ (comma >> parseExpression)
+           pure $ Left (firstExpr : rest)
+      , do -- Single index or single-arg function
+           pure $ Left [firstExpr]
+      ]
+  case result of
+    Left args -> pure $ FunctionCall name args
+    Right (dir, high, low) -> pure $ SliceExpr (IdentifierExpr name) high low dir
+```
+
+**Pros:**
+- Clean separation of slices from indexing/function calls
+- Explicit slice direction in AST
+- Easy to analyze and transform
+
+**Cons:**
+- Adds new expression constructor
+- Requires updates to all pattern matches on Expression
+
+### Option 2: Overload IndexedName with Tuple
+
+**Approach:** Use tuple or special marker to encode ranges in existing `IndexedName`
+
+**Cons:**
+- Confusing semantics
+- Hard to distinguish slice from multi-dimensional indexing
+- Not recommended
+
+## Success Metrics
+
+### Quantitative
+- **Slice Parse Rate:** 0% → 100%
+- **LZX Parse Success:** 0% → 50%+ (with ADC-018)
+- **Simple slice test:** Parse successfully
+- **Test Pass Rate:** Maintain 100%
+
+### Qualitative
+- ✅ `test/fixtures/simple_slice.vhd` parses
+- ✅ Slice expressions work in all contexts (assignments, conditions, concatenations)
+- ✅ Both `downto` and `to` supported
+- ✅ Dynamic indices work (expressions as bounds)
+
+## Test Plan
+
+### Unit Tests
+```haskell
+describe "Slice Parsing" $ do
+  it "parses descending slice" $ do
+    result <- parseExpression "data(7 downto 0)"
+    result `shouldBe` SliceExpr (IdentifierExpr "data")
+                                 (LiteralExpr (IntLiteral 7))
+                                 (LiteralExpr (IntLiteral 0))
+                                 DownTo
+
+  it "parses ascending slice" $ do
+    result <- parseExpression "arr(0 to 7)"
+    result `shouldBe` SliceExpr (IdentifierExpr "arr")
+                                 (LiteralExpr (IntLiteral 0))
+                                 (LiteralExpr (IntLiteral 7))
+                                 To
+
+  it "parses slice with expressions" $ do
+    result <- parseExpression "buffer(width-1 downto 0)"
+    -- Should parse with BinaryExpr for width-1
+```
+
+### Integration Tests
+```bash
+# Simple slice test
+spellcraft test/fixtures/simple_slice.vhd
+# Expected: Parse success
+
+# Downto slice in process
+spellcraft test/fixtures/downto_slice.vhd
+# Expected: Parse success
+
+# Level 1 Kaos Brownie (uses slices)
+spellcraft contrib/lzx-kaos-levels/enhance-level1-undriven.vhd
+# Expected: Parse success (after ADC-018 also implemented)
+```
+
+### Regression Tests
+```bash
+# Existing tests should still pass
+stack test
+# Expected: All 36 tests passing
+
+# Function calls should still work
+# Parse: func(a, b) as function call, not slice
+```
+
+## Edge Cases
+
+### Ambiguity: Single Index vs Single-Arg Function
+
+```vhdl
+x <= foo(5);  -- Is this index or function call?
+```
+
+**Current behavior:** Treated as function call
+**Proposed:** Keep same behavior for backward compatibility
+
+### Nested Slices
+
+```vhdl
+data_2d(i)(7 downto 0)  -- Slice after index
+```
+
+**Resolution:** Parse left-to-right, apply operators sequentially
+
+### Slice as Function Argument
+
+```vhdl
+result <= resize(data(7 downto 0), 16);
+```
+
+**Resolution:** Should work automatically if slice is valid expression
+
+## Parity
+
+### Files to Modify
+- `src/VHDL/AST.hs` - Add `SliceExpr` constructor (or extend `IndexedName`)
+  - Add `SliceDirection` type
+  - Update deriving instances
+
+- `src/VHDL/Parser.hs` - Implement slice parsing
+  - Function: Modify `parseFunctionCallOrIndexed`
+  - Add: Slice direction detection
+  - Location: Lines ~757-779
+
+### Files to Review
+- `src/VHDL/Analysis/SignalUsage.hs` - Extract signals from slice expressions
+  - Update `extractSignalsFromExpr` to handle `SliceExpr`
+  - Both base and bounds are "reads"
+
+### New Files
+- `test/fixtures/simple_slice.vhd` - Already created ✅
+- `test/fixtures/downto_slice.vhd` - Already created ✅
+- `test/fixtures/ascending_slice.vhd` - Ascending range test
+
+## Dependencies
+
+### Blocks
+- LZX 90% parse rate - BLOCKED
+- Level 1 Kaos Brownie - BLOCKED (also needs ADC-018)
+- v0.4.0 Release - BLOCKED
+
+### Blocked By
+- None - can implement immediately
+
+### Related
+- ADC-016 (Attributes) - Just completed ✅
+- ADC-018 (Signal Initialization) - Also blocking parse rate
+- ADC-001 (VHDL Parser) - Base parser contract
+
+## Risks
+
+### High Risk: Breaking Function Call Parsing
+**Mitigation:** Carefully test function call vs slice disambiguation
+
+### Medium Risk: Multi-dimensional Arrays
+**Mitigation:** Parse slices left-to-right, allow chaining
+
+### Low Risk: Performance
+**Mitigation:** Slice parsing is not a hot path
+
+## Timeline
+
+### Immediate (Hour 1)
+1. Add `SliceExpr` to AST with `SliceDirection`
+2. Modify `parseFunctionCallOrIndexed` to detect `downto`/`to`
+3. Test on `test/fixtures/simple_slice.vhd`
+
+### Short Term (Hour 2)
+4. Update `extractSignalsFromExpr` to handle slices
+5. Test on downto_slice.vhd
+6. Run full test suite
+
+### Medium Term (Hour 3)
+7. Test on LZX corpus subset
+8. Implement ascending slice support
+9. Re-test parse rate
+
+## Deliverables
+
+1. ✅ `SliceExpr` added to AST with direction
+2. ✅ Descending slices parse correctly (`downto`)
+3. ✅ Ascending slices parse correctly (`to`)
+4. ✅ Dynamic slice bounds work (expressions)
+5. ✅ All existing tests still passing
+6. ✅ simple_slice.vhd parses successfully
+
+## Notes
+
+**Critical Path:** This is blocker #1 of 2 for v0.4.0 release. Must implement both ADC-017 (slices) and ADC-018 (signal init) to achieve 90%+ parse rate.
+
+**Implementation Order:** Should implement ADC-017 first, then ADC-018, then re-test parse rate.
+
+**User Impact:** Without slice support, parser is completely unusable on real VHDL code. Slices are more fundamental than attributes in typical designs.
+
+---
+
+**Contract Status**: Active
+**Next Review**: After implementation
+**Owner**: Parser Team

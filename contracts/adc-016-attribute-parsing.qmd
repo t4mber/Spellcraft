@@ -1,0 +1,387 @@
+---
+title: "ADC-016: VHDL Attribute Access Parsing"
+id: spellcraft-adc-016
+version: 1.0.0
+status: active
+priority: critical
+created: 2025-11-10
+---
+
+## Purpose
+
+Implement parsing of VHDL attribute access expressions (`identifier'attribute_name`) to unblock Level 1 Kaos Brownie detection and achieve 90%+ parse success rate on LZX corpus.
+
+**Business Impact:** Attributes are fundamental VHDL features used in nearly every design. Without attribute support, 90% of real VHDL files fail to parse, making the tool unusable in production.
+
+## Problem Statement
+
+### Current Behavior
+- Expressions like `signal'length` fail to parse
+- Parser reports "expecting end of input" when encountering `'` after identifier
+- Level 1 Kaos Brownie test fails completely
+- Estimated 90% of LZX corpus files contain attributes
+
+### Example Failures
+```vhdl
+-- Fails: Attribute in process
+s_temp <= a'length;
+
+-- Fails: Attribute in expression
+if s_data'event and s_data = '1' then
+
+-- Fails: Range attribute
+for i in data'range loop
+
+-- Fails: Type attributes
+constant WIDTH : integer := bus'high - bus'low + 1;
+```
+
+**Expected:** Parse successfully and capture attribute access in AST
+**Actual:** Parse error at `'` character
+
+### Impact
+- ❌ Level 1 Kaos Brownie fails to parse
+- ❌ ~90% of LZX corpus fails to parse
+- ❌ Blocks v0.4.0 release (requires 90%+ parse rate)
+- ❌ Tool unusable on real VHDL designs
+
+## VHDL Attribute Reference
+
+### Scalar Type Attributes
+- `T'left` - Leftmost value of type/array T
+- `T'right` - Rightmost value of type/array T
+- `T'high` - Highest value of type/array T
+- `T'low` - Lowest value of type/array T
+- `T'ascending` - True if range is ascending
+- `T'image(X)` - String representation of X
+- `T'value(X)` - Value from string X
+- `T'pos(X)` - Position number of X in type
+- `T'val(N)` - Value at position N
+- `T'succ(X)` - Successor of X
+- `T'pred(X)` - Predecessor of X
+- `T'leftof(X)` - Value to left of X
+- `T'rightof(X)` - Value to right of X
+
+### Array Attributes
+- `A'length` - Number of elements in array
+- `A'range` - Range of array indices
+- `A'reverse_range` - Reverse of range
+- `A'left` - Leftmost index
+- `A'right` - Rightmost index
+- `A'high` - Highest index
+- `A'low` - Lowest index
+- `A'ascending` - True if ascending range
+
+### Signal Attributes (Essential for Clock Detection)
+- `S'event` - True if signal changed this delta cycle
+- `S'active` - True if signal assigned this delta cycle
+- `S'last_event` - Time since last event
+- `S'last_active` - Time since last active
+- `S'last_value` - Previous value before event
+- `S'driving` - True if process drives signal
+- `S'driving_value` - Value being driven
+- `S'stable` - True if no event for time
+- `S'quiet` - True if no assignment for time
+- `S'delayed` - Signal delayed by time
+- `S'transaction` - Toggles on assignment
+
+### Syntax Variations
+```vhdl
+-- Simple attribute: identifier'attribute_name
+signal_name'event
+
+-- Parameterized attribute: identifier'attribute_name(parameters)
+data_type'image(value)
+
+-- Chained: identifier'attribute1'attribute2
+signal_array(index)'length'image
+```
+
+## Requirements
+
+### FR-1: Parse Simple Attributes
+**Priority:** Critical
+**Contract:** ADC-016
+
+Parser MUST support basic attribute syntax `identifier'attribute_name`.
+
+**Acceptance Criteria:**
+- ✅ Parse `signal'event`, `signal'length`, `signal'range`
+- ✅ Parse `type'left`, `type'right`, `type'high`, `type'low`
+- ✅ Capture attribute name in AST
+- ✅ Preserve source location
+
+### FR-2: Parse Parameterized Attributes
+**Priority:** High
+**Contract:** ADC-016
+
+Parser MUST support attributes with parameters like `T'image(X)`.
+
+**Acceptance Criteria:**
+- ✅ Parse `type'image(value)`
+- ✅ Parse `type'value(string)`
+- ✅ Capture parameters as expressions
+- ✅ Support multiple parameters
+
+### FR-3: Parse Chained Attributes
+**Priority:** Medium
+**Contract:** ADC-016
+
+Parser SHOULD support chained attributes `A(i)'length'image`.
+
+**Acceptance Criteria:**
+- ✅ Parse array element attributes
+- ✅ Parse multiple consecutive attributes
+- ✅ Maintain correct precedence
+
+### FR-4: Integrate with Expression Parser
+**Priority:** Critical
+**Contract:** ADC-016
+
+Attributes MUST work in all expression contexts.
+
+**Acceptance Criteria:**
+- ✅ Attributes in if conditions
+- ✅ Attributes in signal assignments
+- ✅ Attributes in arithmetic expressions
+- ✅ Attributes with binary operators
+
+## Implementation Strategy
+
+### Option 1: Extend Primary Expression Parser (RECOMMENDED)
+
+**Approach:** Add attribute parsing to `parsePrimaryExpr` or as postfix operator
+
+**Location:** `src/VHDL/Parser.hs` lines ~700-850
+
+**Implementation:**
+```haskell
+-- Add new expression constructor to AST
+data Expression
+  = -- ... existing constructors
+  | AttributeExpr Expression AttributeName [Expression]
+  deriving (Show, Eq)
+
+type AttributeName = Identifier
+
+-- Parse attribute as postfix operator
+parseAttribute :: Parser Expression
+parseAttribute = do
+  base <- parseBaseExpr  -- identifier, literal, or (expr)
+  attrs <- many $ try $ do
+    void $ char '\''
+    attrName <- identifier
+    params <- optional $ parens $ parseExpression `sepBy` comma
+    pure (attrName, fromMaybe [] params)
+
+  -- Build nested AttributeExpr for each attribute
+  pure $ foldl (\acc (name, params) -> AttributeExpr acc name params) base attrs
+
+parseBaseExpr :: Parser Expression
+parseBaseExpr = choice
+  [ try parseFunctionCallOrIndexed
+  , try (parens parseExpression)
+  , try parseLiteral
+  , IdentifierExpr <$> identifier
+  ]
+```
+
+**Pros:**
+- Clean separation of concerns
+- Handles chained attributes naturally
+- Easy to extend for parameterized attributes
+
+**Cons:**
+- Needs careful precedence management
+- Must handle `'0'` character literal vs `signal'attribute` ambiguity
+
+### Option 2: Extend Function Call Parser
+
+**Approach:** Treat attributes like function calls with `'` operator
+
+**Cons:**
+- Confuses semantic meaning
+- Awkward for chained attributes
+- Not recommended
+
+## Success Metrics
+
+### Quantitative
+- **Attribute Parse Rate:** 0% → 100%
+- **LZX Parse Success:** ~30% → 90%+
+- **Level 1 Kaos Brownie:** Parse failure → Correct detection
+- **Test Pass Rate:** Maintain 100%
+
+### Qualitative
+- ✅ `test/fixtures/attribute.vhd` parses successfully
+- ✅ Level 1 Kaos Brownie detects only `THIS_SIGNAL_IS_NEVER_USED`
+- ✅ Common attributes work: `'event`, `'length`, `'range`, `'left`, `'right`
+- ✅ Clock detection patterns (`rising_edge(clk)` + `clk'event`) both work
+
+## Test Plan
+
+### Unit Tests
+```haskell
+describe "Attribute Parsing" $ do
+  it "parses signal event attribute" $ do
+    result <- parseExpression "clk'event"
+    result `shouldBe` AttributeExpr (IdentifierExpr "clk") "event" []
+
+  it "parses array length attribute" $ do
+    result <- parseExpression "data'length"
+    result `shouldBe` AttributeExpr (IdentifierExpr "data") "length" []
+
+  it "parses parameterized attribute" $ do
+    result <- parseExpression "mytype'image(value)"
+    result `shouldBe` AttributeExpr
+      (IdentifierExpr "mytype")
+      "image"
+      [IdentifierExpr "value"]
+
+  it "parses chained attributes" $ do
+    result <- parseExpression "arr(i)'length'image"
+    -- Should nest correctly
+```
+
+### Integration Tests
+```bash
+# Test fixture with attributes
+spellcraft test/fixtures/attribute.vhd
+# Expected: Parse success, detect no violations
+
+# Level 1 Kaos Brownie
+spellcraft contrib/lzx-kaos-levels/enhance-level1-undriven.vhd
+# Expected: Parse success, detect 1 violation (THIS_SIGNAL_IS_NEVER_USED)
+
+# LZX parse rate test
+spellcraft analyze contrib/lzx/*.vhd
+# Expected: 90%+ parse success rate
+```
+
+### Regression Tests
+```bash
+# Ensure existing tests still pass
+stack test
+# Expected: All 36 tests passing
+
+# Character literal should still work
+spellcraft test/fixtures/char_literal.vhd
+# Expected: Parse '0' as character, not attribute
+```
+
+## Edge Cases
+
+### Ambiguity: Character Literal vs Attribute
+```vhdl
+x <= '0';      -- Character literal
+x <= sig'0;    -- Illegal, but parser might see it
+x <= sig'left; -- Attribute
+```
+
+**Resolution:** Character literals are `'char'` with closing quote. Attributes are `identifier'name` with no closing quote. Parser must check for closing quote immediately after opening.
+
+### Multiple Apostrophes
+```vhdl
+arr(i)'length     -- Array element's length
+type'image(val)   -- Parameterized attribute
+sig'event'image   -- Chained attributes (unusual but legal)
+```
+
+**Resolution:** Parse attributes as postfix operators, allowing chaining.
+
+## Parity
+
+### Files to Modify
+- `src/VHDL/AST.hs` - Add `AttributeExpr` constructor
+  - Add to `Expression` type
+  - Update deriving instances
+
+- `src/VHDL/Parser.hs` - Implement attribute parsing
+  - Function: `parseAttribute` (new)
+  - Update: `parsePrimaryExpr` to call `parseAttribute`
+  - Location: Lines ~700-850 (expression parsing section)
+
+### Files to Review
+- `src/VHDL/Analysis/SignalUsage.hs` - Extract signals from attributes
+  - Update `extractSignalsFromExpr` to handle `AttributeExpr`
+  - Signals in attribute params are "reads"
+
+### New Files
+- `test/fixtures/attribute.vhd` - Already created ✅
+- `test/fixtures/attribute_params.vhd` - Parameterized attributes
+- `test/fixtures/attribute_chains.vhd` - Chained attributes
+
+## Dependencies
+
+### Blocks
+- Level 1 Kaos Brownie detection - BLOCKED
+- LZX 90% parse rate - BLOCKED
+- v0.4.0 Release - BLOCKED
+
+### Blocked By
+- None - can implement immediately
+
+### Related
+- ADC-001 (VHDL Parser) - Base parser contract
+- ADC-015 (Architecture Body Parsing) - Recently fixed
+- ADC-007 (Clock Source Detection) - Needs `'event` attribute
+
+## Risks
+
+### High Risk: Character Literal Disambiguation
+**Mitigation:** Carefully handle `'` token - check for closing quote vs identifier continuation
+
+### Medium Risk: Precedence Conflicts
+**Mitigation:** Parse attributes as high-precedence postfix operators
+
+### Low Risk: Performance
+**Mitigation:** Attributes are common but not performance-critical
+
+## Timeline
+
+### Immediate (Hour 1)
+1. Add `AttributeExpr` to AST
+2. Implement basic `parseAttribute` for simple attributes
+3. Test on `test/fixtures/attribute.vhd`
+
+### Short Term (Hour 2-3)
+4. Add parameterized attribute support
+5. Test on Level 1 Kaos Brownie
+6. Run full test suite
+
+### Medium Term (Hour 4+)
+7. Add chained attribute support (if needed)
+8. Update signal extraction for attributes
+9. Run LZX parse rate test
+
+## Deliverables
+
+1. ✅ `AttributeExpr` added to AST
+2. ✅ Simple attributes parse correctly (`'event`, `'length`, etc.)
+3. ✅ Parameterized attributes parse correctly (`'image(x)`)
+4. ✅ Level 1 Kaos Brownie parses and detects violations
+5. ✅ All existing tests still passing
+6. ✅ LZX parse rate >= 90%
+
+## Notes
+
+**Critical Path:** This is the #1 blocker for v0.4.0 release. Attributes are used in:
+- 90% of LZX corpus files
+- Clock detection (`clk'event`)
+- Array bounds (`data'range`, `signal'length`)
+- Type queries (`type'left`, `type'high`)
+
+**Implementation Priority:** Must complete before moving to EVALUATOR phase.
+
+**User Expectation:** From IMPLEMENTATION_ROADMAP.md:
+> Next Steps:
+> 1. Implement attribute parsing (e.g., identifier'attribute_name)
+> 2. Test on Level 1 Kaos Brownie
+> 3. Run LZX parse rate test
+> 4. Move to EVALUATOR phase
+
+---
+
+**Contract Status**: Active
+**Next Review**: After implementation and testing
+**Owner**: Parser Team
