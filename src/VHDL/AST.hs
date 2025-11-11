@@ -195,11 +195,13 @@ data Architecture = Architecture
 instance ToJSON Architecture
 
 -- | Component instantiation with generic and port maps
+-- ADC-IMPLEMENTS: spellcraft-adc-020
+-- ADC-IMPLEMENTS: spellcraft-adc-021
 data ComponentInst = ComponentInst
   { compInstName :: Identifier
   , compComponentName :: Identifier
-  , compGenericMap :: [(Identifier, Value)]
-  , compPortMap :: [(Identifier, SignalName)]
+  , compGenericMap :: [(Identifier, Expression)]  -- Changed from Value to Expression (ADC-020)
+  , compPortMap :: [(Identifier, Expression)]      -- Changed from SignalName to Expression (ADC-021)
   , compLocation :: SourceLocation
   } deriving (Show, Eq, Generic)
 

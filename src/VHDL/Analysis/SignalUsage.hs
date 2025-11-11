@@ -145,8 +145,9 @@ collectReadsFromArchStatement (ProcessStmt _ sensitivity stmts _) =
 collectReadsFromArchStatement (ConcurrentAssignment _ expr _) =
   extractSignalsFromExpr expr
 collectReadsFromArchStatement (ComponentInstStmt comp) =
-  -- Port map connections are reads
-  map snd (compPortMap comp)
+  -- ADC-IMPLEMENTS: spellcraft-adc-021
+  -- Port map connections are reads (expressions, not just identifiers)
+  concatMap (extractSignalsFromExpr . snd) (compPortMap comp)
 
 -- | Collect reads from a sequential statement
 -- Enhanced: spellcraft-adc-013 Section: SignalUsage Updates

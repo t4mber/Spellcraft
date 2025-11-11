@@ -1,0 +1,174 @@
+---
+title: "ADC-021: Port Map Expression Support"
+id: spellcraft-adc-021
+status: draft
+created: 2025-11-10
+updated: 2025-11-10
+---
+
+# Purpose
+
+Enable the VHDL parser to handle expressions in port map associations, not just simple signal identifiers. VHDL allows complex expressions in port maps, such as function calls, type conversions, and arithmetic expressions.
+
+## Background
+
+Current implementation assumes port maps only contain simple signal names:
+```haskell
+data ComponentInst = ComponentInst
+  { compPortMap :: [(Identifier, SignalName)]  -- SignalName = Text
+  }
+```
+
+However, real VHDL code uses expressions:
+```vhdl
+multiplier_inst : entity work.diff_multiplier_s
+  port map (
+    clk     => clk,                                              -- Simple identifier
+    x_pos   => s_input,                                          -- Simple identifier
+    x_neg   => to_signed((2 ** (C_FRAC_BITS - 1)), C_PROC_WIDTH), -- Function call!
+    y_neg   => to_signed(0, C_PROC_WIDTH),                       -- Function call!
+    result  => s_result                                          -- Simple identifier
+  );
+```
+
+This blocker affects **15 out of 23 files (65%)** in the LZX corpus.
+
+# Interface
+
+## AST Changes
+
+Change `ComponentInst` to accept expressions:
+
+```haskell
+-- ADC-IMPLEMENTS: spellcraft-adc-021
+data ComponentInst = ComponentInst
+  { compInstName :: Identifier
+  , compComponentName :: Identifier
+  , compGenericMap :: [(Identifier, Expression)]
+  , compPortMap :: [(Identifier, Expression)]  -- Changed from SignalName
+  , compLocation :: SourceLocation
+  } deriving (Show, Eq, Generic)
+```
+
+## Parser Changes
+
+Update `signalAssociation` to parse expressions:
+
+```haskell
+-- ADC-IMPLEMENTS: spellcraft-adc-021
+portAssociation :: Parser (Identifier, Expression)
+portAssociation = do
+  name <- identifier
+  void $ symbol "=>"
+  expr <- parseExpression  -- Changed from 'identifier'
+  pure (name, expr)
+```
+
+Update `portMapClause` signature:
+
+```haskell
+-- ADC-IMPLEMENTS: spellcraft-adc-021
+portMapClause :: Parser [(Identifier, Expression)]
+portMapClause = do
+  void $ keyword "port"
+  void $ keyword "map"
+  parens (portAssociation `sepBy` comma)
+```
+
+# Implementation
+
+## Files to Modify
+
+1. **src/VHDL/AST.hs**: Change `compPortMap` type
+2. **src/VHDL/Parser.hs**: Update parser functions
+3. **src/VHDL/Analysis/ClockGraph.hs**: Extract signal from expression
+4. **src/VHDL/Analysis/SignalUsage.hs**: Extract signals from expressions
+5. **src/VHDL/Analysis/Violation.hs**: Handle expression port maps
+
+## Compatibility Helpers
+
+For code that expects simple signal names, provide extraction:
+
+```haskell
+-- ADC-IMPLEMENTS: spellcraft-adc-021
+-- Extract signal name from expression (best effort)
+exprToSignalName :: Expression -> Maybe SignalName
+exprToSignalName (IdentifierExpr name) = Just name
+exprToSignalName _ = Nothing  -- Complex expressions don't have single signal name
+```
+
+# Parity
+
+## File Locations
+
+- Contract: `/Users/tad/t4mber/spellcraft/contracts/adc-021-port-map-expressions.qmd`
+- AST: `/Users/tad/t4mber/spellcraft/src/VHDL/AST.hs`
+- Parser: `/Users/tad/t4mber/spellcraft/src/VHDL/Parser.hs`
+- Analysis: `/Users/tad/t4mber/spellcraft/src/VHDL/Analysis/*.hs`
+
+# Requirements
+
+## Functional
+
+1. Parse simple signal identifiers in port maps (backward compatibility)
+2. Parse function calls in port maps: `to_signed(0, 8)`
+3. Parse nested expressions: `to_signed((2 ** 7), 8)`
+4. Parse arithmetic in port maps: `signal + 1`
+5. Maintain correct signal usage tracking
+
+## Non-Functional
+
+1. All existing tests must pass
+2. Parse rate improvement from 35% to 60%+ expected
+3. No performance regression
+
+# Test Plan
+
+## Unit Tests
+
+Test fixture `test/fixtures/port_map_expr.vhd`:
+```vhdl
+library ieee;
+use ieee.std_logic_1164.all;
+use ieee.numeric_std.all;
+
+entity port_map_expr_test is
+  port (
+    clk : in std_logic;
+    data_in : in std_logic_vector(7 downto 0);
+    result : out signed(7 downto 0)
+  );
+end port_map_expr_test;
+
+architecture rtl of port_map_expr_test is
+begin
+  uut : entity work.example
+    port map (
+      clk => clk,
+      data => to_signed(0, 8),  -- Function call
+      offset => to_signed((2 ** 7), 8),  -- Nested expression
+      result => result
+    );
+end architecture;
+```
+
+## Integration Tests
+
+Run on LZX corpus:
+- Target: 60%+ parse rate (14/23 files)
+- All currently passing files must still pass
+- contrast.vhd should now parse
+
+# Success Criteria
+
+1. ✅ `port_map_expr.vhd` parses successfully
+2. ✅ `contrib/lzx/lumarian/contrast.vhd` parses successfully
+3. ✅ Parse rate improves to 60%+ (14/23 files)
+4. ✅ All 36+ existing tests pass
+5. ✅ Signal usage tracking still works for simple port maps
+
+# References
+
+- Related: ADC-020 (Generic Map Expressions) - same pattern
+- VHDL LRM: Section 6.5.6.2 (Association Lists)
+- LZX Corpus: 15/23 files blocked by this issue

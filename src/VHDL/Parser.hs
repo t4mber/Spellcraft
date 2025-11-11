@@ -399,9 +399,11 @@ componentInst = do
   -- 1. "component comp_name"
   -- 2. "entity lib.entity_name"
   -- 3. "comp_name" (bare)
+  -- IMPORTANT: Each alternative must use 'try' because 'keyword' consumes input before checking
   compName <- choice
-    [ keyword "component" >> identifier
-    , do void $ keyword "entity"
+    [ try (keyword "component" >> identifier)
+    , try $ do
+         void $ keyword "entity"
          lib <- identifier  -- library name (usually "work")
          void $ symbol "."
          name <- identifier  -- entity name
@@ -420,34 +422,40 @@ componentInst = do
     }
 
 -- | Parse generic map
-genericMapClause :: Parser [(Identifier, Value)]
+-- ADC-IMPLEMENTS: spellcraft-adc-020
+genericMapClause :: Parser [(Identifier, Expression)]
 genericMapClause = do
   void $ keyword "generic"
   void $ keyword "map"
   parens (association `sepBy` comma)
 
 -- | Parse port map
-portMapClause :: Parser [(Identifier, SignalName)]
+-- ADC-IMPLEMENTS: spellcraft-adc-021
+portMapClause :: Parser [(Identifier, Expression)]
 portMapClause = do
   void $ keyword "port"
   void $ keyword "map"
-  parens (signalAssociation `sepBy` comma)
+  parens (portAssociation `sepBy` comma)
 
--- | Parse generic association (name => value)
-association :: Parser (Identifier, Value)
+-- | Parse generic association (name => expression)
+-- ADC-IMPLEMENTS: spellcraft-adc-020
+-- Changed from Value to Expression to support complex generic parameters
+association :: Parser (Identifier, Expression)
 association = do
   name <- identifier
   void $ symbol "=>"
-  val <- value
-  pure (name, val)
+  expr <- parseExpression  -- Changed from 'value' to 'parseExpression'
+  pure (name, expr)
 
--- | Parse port association (name => signal)
-signalAssociation :: Parser (Identifier, SignalName)
-signalAssociation = do
+-- | Parse port association (name => expression)
+-- ADC-IMPLEMENTS: spellcraft-adc-021
+-- Changed from identifier to Expression to support complex port connections like function calls
+portAssociation :: Parser (Identifier, Expression)
+portAssociation = do
   name <- identifier
   void $ symbol "=>"
-  signal <- identifier
-  pure (name, signal)
+  expr <- parseExpression  -- Changed from 'identifier' to 'parseExpression'
+  pure (name, expr)
 
 -- | Parse value
 value :: Parser Value
@@ -491,33 +499,15 @@ parseSequentialStatement = trace "parseSequentialStatement called" $ do
 
 -- | Parse sequential statements inside process
 -- Contract: spellcraft-adc-013 Section: Parser Extensions
+-- REFACTORED: Use manyTill for clearer termination logic
 parseSequentialStatements :: Parser [Statement]
 parseSequentialStatements = trace "parseSequentialStatements called" $ do
   -- Parse statements until we see "end process"
-  -- We need to check for "end" followed by "process" to avoid stopping at "end if", "end case", etc.
-  let go = trace "go: checking for end process" $ do
-        -- Try to match "end process" with lookAhead
-        atEnd <- (trace "go: trying lookAhead for 'end process'" $ lookAhead $ try $ do
-          keyword "end"
-          trace "go: found 'end', checking for 'process'" $ pure ()
-          keyword "process"
-          trace "go: found 'end process'!" $ pure ()
-          pure True) <|> (trace "go: no 'end process' found" $ pure False)
+  -- Using manyTill with explicit terminator is clearer than recursive go
+  stmts <- manyTill
+    (trace "Parsing sequential statement" $ parseSequentialStatement)
+    (trace "Checking for end process" $ lookAhead $ try $ keyword "end" >> keyword "process")
 
-        trace ("go: atEnd = " ++ show atEnd) $ pure ()
-        if atEnd
-          then trace "go: stopping (found end process)" $ pure []
-          else do
-            trace "go: trying to parse statement" $ pure ()
-            stmtResult <- (Just <$> parseSequentialStatement) <|> (trace "go: statement parse failed" $ pure Nothing)
-            case stmtResult of
-              Nothing -> trace "go: no statement, stopping" $ pure []
-              Just stmt -> do
-                trace ("go: parsed statement, recursing") $ pure ()
-                rest <- go
-                pure (stmt : rest)
-
-  stmts <- go
   trace ("parseSequentialStatements: parsed " ++ show (length stmts) ++ " statements") $ pure ()
   pure stmts
 

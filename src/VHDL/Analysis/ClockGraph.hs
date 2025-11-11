@@ -14,7 +14,7 @@ module VHDL.Analysis.ClockGraph
 
 import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map
-import Data.Maybe (mapMaybe, listToMaybe)
+import Data.Maybe (mapMaybe, listToMaybe, catMaybes)
 import Data.Text (Text)
 import qualified Data.Text as T
 import GHC.Generics (Generic)
@@ -22,6 +22,7 @@ import VHDL.AST
   ( Architecture(..)
   , ComponentInst(..)
   , Entity(..)
+  , Expression(..)
   , Identifier
   , PortDecl(..)
   , PortDirection(..)
@@ -157,8 +158,16 @@ assignInitialFreqs nodes sources =
                           }) (csSignal source) ns
 
 -- | Extract all signal names from a component instantiation
+-- ADC-IMPLEMENTS: spellcraft-adc-021
+-- Port map now contains expressions, extract signal identifiers from them
 extractSignals :: ComponentInst -> [SignalName]
-extractSignals comp = map snd (compPortMap comp)
+extractSignals comp = catMaybes $ map (exprToSignalName . snd) (compPortMap comp)
+
+-- | Extract signal name from simple expression (best effort)
+-- ADC-IMPLEMENTS: spellcraft-adc-021
+exprToSignalName :: Expression -> Maybe SignalName
+exprToSignalName (IdentifierExpr name) = Just name
+exprToSignalName _ = Nothing  -- Complex expressions don't represent single signals
 
 -- | Create a basic clock node
 mkNode :: SignalName -> ClockNode
@@ -181,6 +190,8 @@ extractEdges lib comp = do
 
 -- | Build edges showing signal flow through component
 -- Fixed: Use port direction instead of name heuristics
+-- ADC-IMPLEMENTS: spellcraft-adc-021
+-- Port map now contains expressions, extract signal identifiers
 buildComponentEdges :: ComponentInst -> ComponentSpec -> [ClockEdge]
 buildComponentEdges comp spec =
   let portMap = Map.fromList (compPortMap comp)
@@ -200,6 +211,8 @@ buildComponentEdges comp spec =
        }
      | inp <- clockInputs
      , out <- clockOutputs
-     , Just inputSig <- [Map.lookup (portConstraintName inp) portMap]
-     , Just outputSig <- [Map.lookup (portConstraintName out) portMap]
+     , Just inputExpr <- [Map.lookup (portConstraintName inp) portMap]
+     , Just outputExpr <- [Map.lookup (portConstraintName out) portMap]
+     , Just inputSig <- [exprToSignalName inputExpr]
+     , Just outputSig <- [exprToSignalName outputExpr]
      ]
