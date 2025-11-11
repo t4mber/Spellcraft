@@ -107,15 +107,31 @@ collectFromArchStatement (ProcessStmt _ _ stmts loc) =
   trace ("collectFromArchStatement (ProcessStmt): found " ++ show (length stmts) ++ " statements") $
   concatMap collectFromSeqStatement stmts
 collectFromArchStatement (ConcurrentAssignment target _ loc) =
-  [(target, [loc])]
+  -- ADC-IMPLEMENTS: spellcraft-adc-022
+  -- Target is now an Expression, extract base signal name
+  case targetToSignalName target of
+    Just name -> [(name, [loc])]
+    Nothing -> []  -- Complex target without clear signal name
 collectFromArchStatement (ComponentInstStmt _) =
   []
 
+-- | Extract base signal name from assignment target (ADC-022)
+targetToSignalName :: Expression -> Maybe Identifier
+targetToSignalName (IdentifierExpr name) = Just name
+targetToSignalName (IndexedName base _) = targetToSignalName base  -- Recurse to get base signal
+targetToSignalName (SliceExpr base _ _ _) = targetToSignalName base
+targetToSignalName _ = Nothing  -- Complex expressions
+
 -- | Collect assignments from a sequential statement
 -- Enhanced: spellcraft-adc-013 Section: SignalUsage Updates
+-- Enhanced: spellcraft-adc-022 Section: Indexed Assignments
 collectFromSeqStatement :: Statement -> [(Identifier, [SourceLocation])]
 collectFromSeqStatement (SignalAssignment target _ loc) =
-  [(target, [loc])]
+  -- ADC-IMPLEMENTS: spellcraft-adc-022
+  -- Target is now an Expression, extract base signal name
+  case targetToSignalName target of
+    Just name -> [(name, [loc])]
+    Nothing -> []  -- Complex target without clear signal name
 collectFromSeqStatement (VariableAssignment _ _ _) =
   []  -- Variables don't count as signal assignments
 collectFromSeqStatement (IfStatement _ thenStmts elsifs elseStmts _) =

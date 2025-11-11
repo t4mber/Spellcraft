@@ -284,13 +284,15 @@ processStmt = do
 -- | Parse concurrent signal assignment
 -- Enhanced: spellcraft-adc-013 Section: Expression Parsing
 -- ADC-IMPLEMENTS: spellcraft-adc-015
+-- ADC-IMPLEMENTS: spellcraft-adc-022
 concurrentAssignment :: Parser ArchStatement
 concurrentAssignment = trace "concurrentAssignment called" $ do
   sc  -- ADC-015: Consume leading whitespace/comments
   trace "concurrentAssignment: after sc" $ pure ()
   pos <- getSourcePos
   trace ("concurrentAssignment: pos = " ++ show pos) $ pure ()
-  target <- identifier
+  -- Use parsePrimaryExpr to avoid consuming <= as comparison operator
+  target <- parsePrimaryExpr  -- Changed from 'identifier' to support indexed assignments (ADC-022)
   trace ("concurrentAssignment: target = " ++ show target) $ pure ()
   void $ symbol "<="
   trace "concurrentAssignment: after <=" $ pure ()
@@ -300,7 +302,7 @@ concurrentAssignment = trace "concurrentAssignment called" $ do
   void semi
   trace "concurrentAssignment: success!" $ pure ()
   pure ConcurrentAssignment
-    { concTarget = target
+    { concTarget = target  -- Now an Expression
     , concExpr = expr
     , concLocation = sourcePosToLocation pos
     }
@@ -513,30 +515,34 @@ parseSequentialStatements = trace "parseSequentialStatements called" $ do
 
 -- | Parse signal assignment statement
 -- Contract: spellcraft-adc-013 Section: Parser Extensions
+-- ADC-IMPLEMENTS: spellcraft-adc-022
 parseSignalAssignment :: Parser Statement
 parseSignalAssignment = do
   pos <- getSourcePos
-  target <- identifier
+  -- Use parsePrimaryExpr to avoid consuming <= as comparison operator
+  target <- parsePrimaryExpr  -- Changed from 'identifier' to support indexed assignments (ADC-022)
   void $ symbol "<="
   expr <- parseExpression
   void semi
   pure SignalAssignment
-    { stmtTarget = target
+    { stmtTarget = target  -- Now an Expression
     , stmtExpr = expr
     , stmtLocation = sourcePosToLocation pos
     }
 
 -- | Parse variable assignment statement
 -- Contract: spellcraft-adc-013 Section: Parser Extensions
+-- ADC-IMPLEMENTS: spellcraft-adc-022
 parseVariableAssignment :: Parser Statement
 parseVariableAssignment = do
   pos <- getSourcePos
-  target <- identifier
+  -- Use parsePrimaryExpr to avoid consuming := as operator
+  target <- parsePrimaryExpr  -- Changed from 'identifier' to support indexed assignments (ADC-022)
   void $ symbol ":="
   expr <- parseExpression
   void semi
   pure VariableAssignment
-    { stmtVarTarget = target
+    { stmtVarTarget = target  -- Now an Expression
     , stmtVarExpr = expr
     , stmtLocation = sourcePosToLocation pos
     }

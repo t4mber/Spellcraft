@@ -121,6 +121,7 @@ instance ToJSON SignalDecl
 
 -- | Architecture-level statement (processes, concurrent, component instantiations)
 -- Contract: spellcraft-adc-012 Section: Signal Usage Tracker
+-- Enhanced: spellcraft-adc-022 Section: Indexed Assignments
 data ArchStatement
   = ProcessStmt
       { procName :: Maybe Identifier
@@ -129,7 +130,7 @@ data ArchStatement
       , procLocation :: SourceLocation
       }
   | ConcurrentAssignment
-      { concTarget :: SignalName
+      { concTarget :: Expression  -- Changed from SignalName to Expression (ADC-022)
       , concExpr :: Expression  -- Changed from SignalName per ADC-013
       , concLocation :: SourceLocation
       }
@@ -141,14 +142,15 @@ instance ToJSON ArchStatement
 -- | Sequential statement (inside processes)
 -- Contract: spellcraft-adc-012 Section: Signal Usage Tracker
 -- Enhanced: spellcraft-adc-013 Section: AST Extensions
+-- Enhanced: spellcraft-adc-022 Section: Indexed Assignments
 data Statement
   = SignalAssignment
-      { stmtTarget :: SignalName
+      { stmtTarget :: Expression  -- Changed from SignalName to Expression (ADC-022)
       , stmtExpr :: Expression  -- Changed from SignalName per ADC-013
       , stmtLocation :: SourceLocation
       }
   | VariableAssignment
-      { stmtVarTarget :: Identifier
+      { stmtVarTarget :: Expression  -- Changed from Identifier to Expression (ADC-022)
       , stmtVarExpr :: Expression
       , stmtLocation :: SourceLocation
       }
