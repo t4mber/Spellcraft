@@ -751,32 +751,46 @@ parseBinaryOp parseHigher ops = do
     pure (op, right)
   pure $ foldl (\acc (op, right) -> BinaryExpr op acc right) left rest
 
--- | Parse function call or indexed name
+-- | Parse function call, indexed name, or slice
 -- Combined to avoid parsing identifier twice
 -- Uses try to backtrack if there's no '(' after identifier
+-- ADC-IMPLEMENTS: spellcraft-adc-017
 parseFunctionCallOrIndexed :: Parser Expression
 parseFunctionCallOrIndexed = try $ do
   name <- identifier
-  -- Now parse as function call or indexed name
+  -- Now parse as function call, slice, or indexed name
   result <- parens $ do
     -- Parse first expression
     firstExpr <- parseExpression
-    -- Check if there are more (comma-separated for function, or another paren for indexed)
-    rest <- many $ try $ (comma >> parseExpression)
-    pure (firstExpr, rest)
+    -- Check what comes next to determine type
+    choice
+      [ try $ do
+          -- Slice: downto or to keyword
+          dir <- (keyword "downto" >> pure DownTo) <|> (keyword "to" >> pure To)
+          secondExpr <- parseExpression
+          pure $ Right (dir, firstExpr, secondExpr)
+      , do
+          -- Function call or indexed: comma-separated expressions
+          rest <- many $ try $ (comma >> parseExpression)
+          pure $ Left (firstExpr, rest)
+      ]
   -- Process result
-  let (firstExpr, rest) = result
-  if null rest
-    then do
-      -- Single expression - could be function call with one arg or indexed name
-      -- Try to see if there are more indices
-      moreIndices <- many $ try $ parens parseExpression
-      if null moreIndices
-        then pure $ FunctionCall name [firstExpr]  -- Function call with 1 arg
-        else pure $ foldl IndexedName (IdentifierExpr name) (firstExpr : moreIndices)
-    else
-      -- Multiple comma-separated expressions - function call
-      pure $ FunctionCall name (firstExpr : rest)
+  case result of
+    Right (dir, high, low) ->
+      -- It's a slice: signal(high downto/to low)
+      pure $ SliceExpr (IdentifierExpr name) high low dir
+    Left (firstExpr, rest) ->
+      if null rest
+        then do
+          -- Single expression - could be function call with one arg or indexed name
+          -- Try to see if there are more indices
+          moreIndices <- many $ try $ parens parseExpression
+          if null moreIndices
+            then pure $ FunctionCall name [firstExpr]  -- Function call with 1 arg
+            else pure $ foldl IndexedName (IdentifierExpr name) (firstExpr : moreIndices)
+        else
+          -- Multiple comma-separated expressions - function call
+          pure $ FunctionCall name (firstExpr : rest)
 
 -- | Parse function call (kept for backward compat, delegates to combined parser)
 parseFunctionCall :: Parser Expression

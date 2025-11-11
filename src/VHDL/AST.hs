@@ -24,6 +24,7 @@ module VHDL.AST
   , Expression(..)
   , BinaryOp(..)
   , UnaryOp(..)
+  , SliceDirection(..)
   , Literal(..)
     -- * Types
   , Identifier
@@ -217,9 +218,10 @@ data Value
 
 instance ToJSON Value
 
--- | VHDL Expressions (according to ADC-013, ADC-016)
+-- | VHDL Expressions (according to ADC-013, ADC-016, ADC-017)
 -- Contract: spellcraft-adc-013 Section: AST Extensions
 -- Contract: spellcraft-adc-016 Section: AST Extensions
+-- Contract: spellcraft-adc-017 Section: AST Extensions
 data Expression
   = IdentifierExpr Identifier
   | LiteralExpr Literal
@@ -231,6 +233,9 @@ data Expression
   -- ADC-IMPLEMENTS: spellcraft-adc-016
   -- Attribute access: signal'event, arr'length, type'image(value)
   | AttributeExpr Expression Identifier [Expression]
+  -- ADC-IMPLEMENTS: spellcraft-adc-017
+  -- Slice/range indexing: signal(7 downto 0), arr(0 to 7)
+  | SliceExpr Expression Expression Expression SliceDirection
   deriving (Show, Eq, Generic)
 
 instance ToJSON Expression
@@ -251,6 +256,15 @@ data UnaryOp
   deriving (Show, Eq, Generic)
 
 instance ToJSON UnaryOp
+
+-- ADC-IMPLEMENTS: spellcraft-adc-017
+-- | Slice direction for range indexing
+data SliceDirection
+  = DownTo  -- signal(7 downto 0)
+  | To      -- signal(0 to 7)
+  deriving (Show, Eq, Generic)
+
+instance ToJSON SliceDirection
 
 -- | Literal values in expressions
 data Literal

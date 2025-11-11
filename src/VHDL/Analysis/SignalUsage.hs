@@ -178,6 +178,7 @@ collectReadsFromSeqStatement (NullStatement _) = []
 -- | Extract signal references from expressions
 -- Contract: spellcraft-adc-013 Section: SignalUsage Updates
 -- Contract: spellcraft-adc-016 Section: SignalUsage Updates
+-- Contract: spellcraft-adc-017 Section: SignalUsage Updates
 extractSignalsFromExpr :: Expression -> [Identifier]
 extractSignalsFromExpr (IdentifierExpr name) = [name]
 extractSignalsFromExpr (LiteralExpr _) = []
@@ -195,3 +196,7 @@ extractSignalsFromExpr (Aggregate exprs) =
 -- Extract signals from attribute expressions: signal'event, arr'length
 extractSignalsFromExpr (AttributeExpr base _ params) =
   extractSignalsFromExpr base ++ concatMap extractSignalsFromExpr params
+-- ADC-IMPLEMENTS: spellcraft-adc-017
+-- Extract signals from slice expressions: signal(7 downto 0)
+extractSignalsFromExpr (SliceExpr base high low _) =
+  extractSignalsFromExpr base ++ extractSignalsFromExpr high ++ extractSignalsFromExpr low
