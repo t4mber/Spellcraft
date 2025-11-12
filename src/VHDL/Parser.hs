@@ -70,24 +70,21 @@ data ContextItem = LibItem LibraryDeclaration | UseItem UseClause
 data DesignUnit = EntityUnit Entity | ArchUnit Architecture
 
 vhdlDesign :: FilePath -> Parser VHDLDesign
-vhdlDesign path = trace "vhdlDesign called" $ do
+vhdlDesign path = do
   sc  -- Consume initial whitespace/comments
   -- Parse library and use clauses (can be interleaved in VHDL-2008)
   contextItems <- many (try parseContextItem)
   let libraries = [lib | LibItem lib <- contextItems]
   let uses = [use | UseItem use <- contextItems]
-  trace ("Parsed " ++ show (length contextItems) ++ " context items") $ pure ()
   -- ADC-IMPLEMENTS: spellcraft-adc-025
   -- Parse design units in any order (entities and architectures can be intermixed)
   -- This allows standalone architecture files without entities
   designUnits <- many (try parseDesignUnit)
-  trace ("Parsed " ++ show (length designUnits) ++ " design units") $ pure ()
   let entities = [e | EntityUnit e <- designUnits]
   let architectures = [a | ArchUnit a <- designUnits]
-  trace ("  Entities: " ++ show (length entities) ++ ", Architectures: " ++ show (length architectures)) $ pure ()
-  trace "About to check eof" $ pure ()
+  pure ()
   eof
-  trace "Parse complete!" $ pure ()
+  pure ()
   pure VHDLDesign
     { designLibraries = libraries
     , designUses = uses
@@ -104,10 +101,9 @@ parseContextItem = try (LibItem <$> parseLibraryDeclaration) <|> try (UseItem <$
 -- | Parse a single design unit (entity or architecture in any order)
 -- This allows standalone architecture files without entities
 parseDesignUnit :: Parser DesignUnit
-parseDesignUnit = trace "parseDesignUnit ENTER" $ do
-  result <- try (trace "parseDesignUnit: trying entity" $ EntityUnit <$> entityDecl)
-        <|> try (trace "parseDesignUnit: trying architecture" $ ArchUnit <$> architectureDecl)
-  trace ("parseDesignUnit: SUCCESS - got " ++ show (case result of EntityUnit _ -> "entity"; ArchUnit _ -> "architecture")) $ pure ()
+parseDesignUnit = do
+  result <- try (EntityUnit <$> entityDecl)
+        <|> try (ArchUnit <$> architectureDecl)
   pure result
 
 -- | Parse library declaration (e.g., "library work;")
@@ -263,29 +259,28 @@ processStmt = do
   void $ keyword "process"
   -- Parse sensitivity list
   sensitivity <- option [] $ parens (identifier `sepBy` comma)
-  trace ("Parsed sensitivity list: " ++ show sensitivity) $ pure ()
+  
   -- Skip declarations for now
   _ <- optional $ try $ do
-    trace "Trying to skip declarations" $ pure ()
-    _ <- skipManyTill anySingle (try $ lookAhead $ keyword "begin")
-    trace "Skipped declarations" $ pure ()
     pure ()
-  trace "About to consume 'begin'" $ pure ()
+    _ <- skipManyTill anySingle (try $ lookAhead $ keyword "begin")
+    pure ()
+    pure ()
+  pure ()
   void $ keyword "begin"
-  trace "After 'begin' keyword" $ pure ()
+  pure ()
   -- Debug: try to peek at next token
   _ <- optional $ try $ do
     pos <- getSourcePos
-    trace ("Current position: " ++ show pos) $ pure ()
+    
     nextTok <- optional $ try $ lookAhead identifier
-    trace ("Next identifier: " ++ show nextTok) $ pure ()
+    
     -- Try to manually check if "end" matches
     endMatches <- optional $ try $ lookAhead (keyword "end")
-    trace ("Does 'end' match? " ++ show (case endMatches of Just _ -> True; Nothing -> False)) $ pure ()
     pure ()
   -- Parse sequential statements per ADC-013
   statements <- parseSequentialStatements
-  trace "After parseSequentialStatements" $ pure ()
+  pure ()
   void $ keyword "end"
   void $ keyword "process"
   void semi
@@ -301,21 +296,21 @@ processStmt = do
 -- ADC-IMPLEMENTS: spellcraft-adc-015
 -- ADC-IMPLEMENTS: spellcraft-adc-022
 concurrentAssignment :: Parser ArchStatement
-concurrentAssignment = trace "concurrentAssignment called" $ do
+concurrentAssignment = do
   sc  -- ADC-015: Consume leading whitespace/comments
-  trace "concurrentAssignment: after sc" $ pure ()
+  pure ()
   pos <- getSourcePos
-  trace ("concurrentAssignment: pos = " ++ show pos) $ pure ()
+  
   -- Use parsePrimaryExpr to avoid consuming <= as comparison operator
   target <- parsePrimaryExpr  -- Changed from 'identifier' to support indexed assignments (ADC-022)
-  trace ("concurrentAssignment: target = " ++ show target) $ pure ()
+  
   void $ symbol "<="
-  trace "concurrentAssignment: after <=" $ pure ()
+  pure ()
   -- Parse expression per ADC-013
   expr <- parseExpression
-  trace ("concurrentAssignment: expr = " ++ show expr) $ pure ()
+  
   void semi
-  trace "concurrentAssignment: success!" $ pure ()
+  pure ()
   pure ConcurrentAssignment
     { concTarget = target  -- Now an Expression
     , concExpr = expr
@@ -324,10 +319,10 @@ concurrentAssignment = trace "concurrentAssignment called" $ do
 
 -- | Parse architecture-level statement (process, concurrent, or component)
 archStatement :: Parser ArchStatement
-archStatement = trace "archStatement called" $ choice
-  [ trace "trying processStmt" $ try processStmt
-  , trace "trying componentInst" $ try (ComponentInstStmt <$> componentInst)
-  , trace "trying concurrentAssignment" $ try concurrentAssignment
+archStatement = choice
+  [ try processStmt
+  , try (ComponentInstStmt <$> componentInst)
+  , try concurrentAssignment
   ]
 
 -- | Skip a declaration that we don't parse (constant, type, etc.)
@@ -369,43 +364,41 @@ parseDeclarations = do
 
 -- | Parse architecture declaration
 architectureDecl :: Parser Architecture
-architectureDecl = trace "architectureDecl called" $ do
+architectureDecl = do
   sc  -- Consume leading whitespace/comments
   pos <- getSourcePos
-  trace "About to parse 'architecture' keyword" $ pure ()
+  pure ()
   void $ keyword "architecture"
-  trace "Parsed 'architecture', getting name" $ pure ()
+  pure ()
   name <- identifier
-  trace ("Architecture name: " ++ show name) $ pure ()
+  
   void $ keyword "of"
-  trace "Parsed 'of'" $ pure ()
+  pure ()
   entName <- identifier
-  trace ("Entity name: " ++ show entName) $ pure ()
+  
   void $ keyword "is"
-  trace "Parsed 'is'" $ pure ()
+  pure ()
   -- ADC-IMPLEMENTS: spellcraft-adc-015
   -- Parse declarations section (signals, constants, types, etc.)
   signals <- parseDeclarations
-  trace ("Parsed " ++ show (length signals) ++ " signal declarations") $ pure ()
   -- We should now be at "begin"
   void $ keyword "begin"
-  trace "Parsed 'begin'" $ pure ()
+  pure ()
   posAfterBegin <- getSourcePos
-  trace ("Position after 'begin': " ++ show posAfterBegin) $ pure ()
+  
   -- Parse architecture body statements
   -- This collects processes, concurrent assignments, and component instantiations
   statements <- many (try archStatement)
-  trace ("Parsed " ++ show (length statements) ++ " statements") $ pure ()
   posAfterStmts <- getSourcePos
-  trace ("Position after statements: " ++ show posAfterStmts) $ pure ()
+  
   -- Now consume the "end architecture" terminator
   -- Supports both "end architecture;" and "end architecture <name>;"
-  trace "architectureDecl: parsing 'end' keyword" $ void $ keyword "end"
-  trace "architectureDecl: parsed 'end'" $ pure ()
-  trace "architectureDecl: parsing optional 'architecture' keyword" $ void $ optional (try $ keyword "architecture")
-  trace "architectureDecl: parsing optional identifier" $ void $ optional (try identifier)
-  trace "architectureDecl: parsing semicolon" $ void semi
-  trace "architectureDecl: SUCCESS! Creating Architecture record" $ pure ()
+  void $ keyword "end"
+  pure ()
+  void $ optional (try $ keyword "architecture")
+  void $ optional (try identifier)
+  void semi
+  pure ()
   pure Architecture
     { archName = name
     , archEntityName = entName
@@ -423,40 +416,38 @@ architectureDecl = trace "architectureDecl called" $ do
 --   inst : comp_name ...
 --   inst : entity work.entity_name ...
 componentInst :: Parser ComponentInst
-componentInst = trace "componentInst ENTER" $ do
+componentInst = do
   sc  -- ADC-015: Consume leading whitespace/comments
   pos <- getSourcePos
-  trace ("componentInst: pos = " ++ show pos) $ pure ()
-  instName <- trace "componentInst: parsing instName" $ identifier
-  trace ("componentInst: instName = " ++ show instName) $ pure ()
-  trace "componentInst: parsing colon" $ void colon
-  trace "componentInst: colon parsed" $ pure ()
+  
+  instName <- identifier
+  
+  void colon
+  pure ()
   -- Handle three forms:
   -- 1. "component comp_name"
   -- 2. "entity lib.entity_name"
   -- 3. "comp_name" (bare)
   -- IMPORTANT: Each alternative must use 'try' because 'keyword' consumes input before checking
-  compName <- trace "componentInst: parsing compName" $ choice
-    [ trace "componentInst: trying 'component'" $ try (keyword "component" >> identifier)
-    , trace "componentInst: trying 'entity lib.name'" $ try $ do
-         trace "componentInst: parsing 'entity' keyword" $ void $ keyword "entity"
-         trace "componentInst: parsed 'entity', getting lib" $ pure ()
+  compName <- choice
+    [ try (keyword "component" >> identifier)
+    , try $ do
+         void $ keyword "entity"
+         pure ()
          lib <- identifier  -- library name (usually "work")
-         trace ("componentInst: lib = " ++ show lib) $ pure ()
-         trace "componentInst: parsing dot" $ void $ symbol "."
-         trace "componentInst: parsed dot, getting name" $ pure ()
+         
+         void $ symbol "."
+         pure ()
          name <- identifier  -- entity name
-         trace ("componentInst: entity name = " ++ show name) $ pure ()
+         
          pure (lib <> "." <> name)  -- Combine as "work.entity_name"
-    , trace "componentInst: trying bare identifier" $ identifier  -- bare component name
+    , identifier  -- bare component name
     ]
-  trace ("componentInst: compName = " ++ show compName) $ pure ()
-  gmap <- trace "componentInst: parsing generic map" $ option [] (try genericMapClause)
-  trace ("componentInst: gmap has " ++ show (length gmap) ++ " entries") $ pure ()
-  pmap <- trace "componentInst: parsing port map" $ option [] (try portMapClause)
-  trace ("componentInst: pmap has " ++ show (length pmap) ++ " entries") $ pure ()
-  trace "componentInst: parsing semicolon" $ void semi
-  trace "componentInst: SUCCESS!" $ pure ()
+  
+  gmap <- option [] (try genericMapClause)
+  pmap <- option [] (try portMapClause)
+  void semi
+  pure ()
   pure ComponentInst
     { compInstName = instName
     , compComponentName = compName
@@ -477,12 +468,11 @@ genericMapClause = do
 -- ADC-IMPLEMENTS: spellcraft-adc-021
 -- ADC-IMPLEMENTS: spellcraft-adc-025
 portMapClause :: Parser [(Identifier, Expression)]
-portMapClause = trace "portMapClause ENTER" $ do
-  trace "portMapClause: parsing 'port' keyword" $ void $ keyword "port"
-  trace "portMapClause: parsing 'map' keyword" $ void $ keyword "map"
-  trace "portMapClause: parsing parens with associations" $ pure ()
+portMapClause = do
+  void $ keyword "port"
+  void $ keyword "map"
+  pure ()
   result <- parens (portAssociation `sepBy` comma)
-  trace ("portMapClause: parsed " ++ show (length result) ++ " associations") $ pure ()
   pure result
 
 -- | Parse generic association (name => expression)
@@ -500,13 +490,13 @@ association = do
 -- ADC-IMPLEMENTS: spellcraft-adc-025
 -- Changed from identifier to Expression to support complex port connections like function calls
 portAssociation :: Parser (Identifier, Expression)
-portAssociation = trace "portAssociation ENTER" $ do
-  name <- trace "portAssociation: parsing name" $ identifier
-  trace ("portAssociation: name = " ++ show name) $ pure ()
-  trace "portAssociation: parsing =>" $ void $ symbol "=>"
-  trace "portAssociation: parsing expression" $ pure ()
+portAssociation = do
+  name <- identifier
+  
+  void $ symbol "=>"
+  pure ()
   expr <- parseExpression  -- Changed from 'identifier' to 'parseExpression'
-  trace ("portAssociation: expr = " ++ show expr) $ pure ()
+  
   pure (name, expr)
 
 -- | Parse value
@@ -533,34 +523,33 @@ sourcePosToLocation pos = SourceLocation
 -- | Parse a single sequential statement
 -- Contract: spellcraft-adc-013 Section: Parser Extensions
 parseSequentialStatement :: Parser Statement
-parseSequentialStatement = trace "parseSequentialStatement called" $ do
+parseSequentialStatement = do
   sc  -- Consume leading whitespace
-  trace "parseSequentialStatement: after sc" $ pure ()
+  pure ()
   posAfterSc <- getSourcePos
-  trace ("parseSequentialStatement: position = " ++ show posAfterSc) $ pure ()
+  
   -- Try to parse different statement types
   choice
-    [ trace "Trying parseSignalAssignment" $ try parseSignalAssignment
-    , trace "Trying parseVariableAssignment" $ try parseVariableAssignment
-    , trace "Trying parseIfStatement" $ try parseIfStatement
-    , trace "Trying parseCaseStatement" $ try parseCaseStatement
-    , trace "Trying parseLoopStatement" $ try parseLoopStatement
-    , trace "Trying parseWaitStatement" $ try parseWaitStatement
-    , trace "Trying parseNullStatement" $ try parseNullStatement
+    [ try parseSignalAssignment
+    , try parseVariableAssignment
+    , try parseIfStatement
+    , try parseCaseStatement
+    , try parseLoopStatement
+    , try parseWaitStatement
+    , try parseNullStatement
     ]
 
 -- | Parse sequential statements inside process
 -- Contract: spellcraft-adc-013 Section: Parser Extensions
 -- REFACTORED: Use manyTill for clearer termination logic
 parseSequentialStatements :: Parser [Statement]
-parseSequentialStatements = trace "parseSequentialStatements called" $ do
+parseSequentialStatements = do
   -- Parse statements until we see "end process"
   -- Using manyTill with explicit terminator is clearer than recursive go
   stmts <- manyTill
-    (trace "Parsing sequential statement" $ parseSequentialStatement)
-    (trace "Checking for end process" $ lookAhead $ try $ keyword "end" >> keyword "process")
+    (parseSequentialStatement)
+    (lookAhead $ try $ keyword "end" >> keyword "process")
 
-  trace ("parseSequentialStatements: parsed " ++ show (length stmts) ++ " statements") $ pure ()
   pure stmts
 
 -- | Parse signal assignment statement
