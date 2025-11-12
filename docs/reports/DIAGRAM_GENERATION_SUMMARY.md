@@ -91,23 +91,6 @@ In-depth explanation of sigma-delta mixing, IIR filtering, and multiplier-free i
 - Template for creating new diagrams
 - Checklist of available/pending diagrams
 
-#### ✅ Parsing Anti-Patterns Policy
-**File**: `policy/parsing-anti-patterns.md`
-
-**Purpose**: Document parser anti-patterns discovered during ADC-013 implementation
-
-**Key Anti-Patterns**:
-- AP-001: `manyTill` with consuming parsers (causes infinite loops)
-- AP-002: `choice` without `try` wrappers (prevents backtracking)
-- AP-003: Consuming whitespace before all alternatives
-- AP-004: `manyTill` with ambiguous terminator
-
-**Recommended Patterns**:
-- RP-001: `many` with `notFollowedBy` guards
-- RP-002: Lexeme-based whitespace handling
-- RP-003: Top-level `try` in `choice`
-- RP-004: Lookahead for disambiguation
-
 ---
 
 ## Design Philosophy Applied
@@ -166,30 +149,6 @@ graph TB
 - Timing/Logic: Light Yellow (#fff5e1)
 
 **Node Format**: `NAME["Label<br/>Description"]`
-
----
-
-## Parsing Anti-Patterns Documentation
-
-### Context
-
-During ADC-013 (Process Body Parsing) implementation, we encountered critical parser bugs:
-- Infinite loops from `manyTill` with consuming parsers
-- Backtracking failures from missing `try` wrappers
-- Expression parser hanging on simple identifiers
-
-### Solution
-
-Created comprehensive anti-pattern documentation (`policy/parsing-anti-patterns.md`) with:
-- 4 major anti-patterns with detailed explanations
-- 4 recommended patterns with examples
-- Historical context from ADC-013 debugging
-- Test case templates
-- Policy enforcement guidelines
-
-### Impact
-
-Future parser development will avoid these pitfalls, saving hours of debugging time.
 
 ---
 

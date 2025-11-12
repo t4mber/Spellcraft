@@ -38,10 +38,6 @@ LZX diagram generation task summary
 - High-level patch diagrams (Lumarian, Mirrorbound)
 - Mermaid diagram standards
 
-### LINT_REPORT.md
-Contract lint macro application report
-- Documentation formatting fixes
-
 ## Quick Reference
 
 **Run all tests**:
