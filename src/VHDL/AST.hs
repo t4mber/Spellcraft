@@ -224,10 +224,11 @@ data Value
 
 instance ToJSON Value
 
--- | VHDL Expressions (according to ADC-013, ADC-016, ADC-017)
+-- | VHDL Expressions (according to ADC-013, ADC-016, ADC-017, ADC-026)
 -- Contract: spellcraft-adc-013 Section: AST Extensions
 -- Contract: spellcraft-adc-016 Section: AST Extensions
 -- Contract: spellcraft-adc-017 Section: AST Extensions
+-- Contract: spellcraft-adc-026 Section: AST Extensions
 data Expression
   = IdentifierExpr Identifier
   | LiteralExpr Literal
@@ -242,6 +243,9 @@ data Expression
   -- ADC-IMPLEMENTS: spellcraft-adc-017
   -- Slice/range indexing: signal(7 downto 0), arr(0 to 7)
   | SliceExpr Expression Expression Expression SliceDirection
+  -- ADC-IMPLEMENTS: spellcraft-adc-026
+  -- Selected name (record field access): signal.field, record.field1.field2
+  | SelectedName Expression Identifier
   deriving (Show, Eq, Generic)
 
 instance ToJSON Expression

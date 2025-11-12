@@ -772,26 +772,33 @@ parsePrimaryExpr = do
     , try parseFunctionCallOrIndexed -- Function calls/indexed (has '(' after identifier)
     , IdentifierExpr <$> identifier  -- Finally bare identifiers
     ]
-  -- Check for attributes (postfix 'attribute_name or 'attribute_name(params))
-  parseAttributes base
+  -- Check for postfix operators: attributes ('attribute) and selected names (.field)
+  parsePostfixOps base
 
--- ADC-IMPLEMENTS: spellcraft-adc-016
--- | Parse attribute access as postfix operator
--- Handles: signal'event, arr'length, type'image(value), arr(i)'length
-parseAttributes :: Expression -> Parser Expression
-parseAttributes base = do
-  attrs <- many $ try $ do
-    -- Need apostrophe followed by identifier (not another apostrophe for char literal)
-    void $ char '\''
-    -- Look ahead to ensure it's an identifier, not a closing quote for char literal
-    lookAhead $ satisfy (\c -> isAlpha c || c == '_')
-    attrName <- identifier
-    -- Check for parameterized attribute: 'image(value)
-    params <- option [] $ try $ parens $ parseExpression `sepBy` comma
-    pure (attrName, params)
-
-  -- Build nested AttributeExpr for each attribute (supports chaining)
-  pure $ foldl (\acc (name, params) -> AttributeExpr acc name params) base attrs
+-- ADC-IMPLEMENTS: spellcraft-adc-016, spellcraft-adc-026
+-- | Parse postfix operators (attributes and selected names)
+-- Handles:
+--   - Attributes: signal'event, arr'length, type'image(value)
+--   - Selected names: signal.field, record.field1.field2
+--   - Mixed: signal.field'length, arr(i).field
+parsePostfixOps :: Expression -> Parser Expression
+parsePostfixOps base = do
+  ops <- many $ try $ choice
+    [ do  -- Attribute: 'name or 'name(params)
+        void $ char '\''
+        lookAhead $ satisfy (\c -> isAlpha c || c == '_')
+        attrName <- identifier
+        params <- option [] $ try $ parens $ parseExpression `sepBy` comma
+        pure $ \expr -> AttributeExpr expr attrName params
+    , do  -- Selected name: .field
+        void $ symbol "."
+        -- Ensure next character is letter/underscore (not digit - that would be real literal)
+        lookAhead $ satisfy (\c -> isAlpha c || c == '_')
+        fieldName <- identifier
+        pure $ \expr -> SelectedName expr fieldName
+    ]
+  -- Apply all postfix operators left-to-right
+  pure $ foldl (\acc applyOp -> applyOp acc) base ops
 
 -- | Parse binary operators with left associativity
 parseBinaryOp :: Parser Expression -> [(Text, BinaryOp)] -> Parser Expression
