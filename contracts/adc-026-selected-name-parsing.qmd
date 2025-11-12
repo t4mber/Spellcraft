@@ -1,0 +1,359 @@
+---
+title: "ADC-026: Selected Name (Dot Notation) Parsing"
+id: spellcraft-adc-026
+status: active
+created: 2025-11-11
+updated: 2025-11-11
+---
+
+# Purpose
+
+Implement VHDL selected name parsing to support record field access using dot notation (e.g., `signal.field`, `record.field.subfield`). This is the PRIMARY blocker preventing lumarian.vhd and 6+ other files from parsing.
+
+## Background
+
+**Current State:**
+- Parse rate: 65% (15/23 files)
+- Blocker identified: Parser enters infinite loop on `data_in.avid` expressions
+- Impact: 8 files blocked, majority likely use record types with field access
+
+**From ADC-025 Phase 2 Investigation:**
+- ✅ Record type declarations fixed (skipDeclaration now handles `type...record...end record`)
+- ⚠️ Selected names cause infinite loop in parseExpression
+- Root cause: No support for dot notation in expression parser
+- Test case: `test/fixtures/test_portmap_record_field.vhd` hangs indefinitely
+
+**VHDL Selected Name Syntax:**
+```vhdl
+-- Simple field access
+signal_name.field_name
+
+-- Nested field access
+signal_name.outer_field.inner_field
+
+-- In expressions
+result <= data_in.y + offset;
+
+-- In port maps
+port map (
+    enable => data_in.avid,
+    data => packet.header.address
+)
+
+-- With indexing (mixed)
+array_signal(5).field_name
+record_signal.field_name(3)
+```
+
+# Interface
+
+## Input
+
+**Expressions requiring selected name parsing:**
+- Record field access: `identifier.field`
+- Nested field access: `identifier.field1.field2.field3`
+- Mixed with indexing: `identifier(index).field` or `identifier.field(index)`
+- In any expression context (assignments, port maps, conditions, etc.)
+
+## Output
+
+**New AST Node:**
+```haskell
+-- In Expression type
+data Expression
+  = ...
+  | SelectedName Expression Identifier  -- Base expression + field selector
+  | ...
+```
+
+**Parsing Behavior:**
+- `data_in.avid` → `SelectedName (IdentifierExpr "data_in") "avid"`
+- `sig.f1.f2` → `SelectedName (SelectedName (IdentifierExpr "sig") "f1") "f2"`
+- `arr(i).field` → `SelectedName (IndexedName (IdentifierExpr "arr") (IdentifierExpr "i")) "field"`
+
+# Implementation
+
+## Phase 1: Add SelectedName to AST
+
+**File:** `src/VHDL/AST.hs`
+
+```haskell
+-- ADC-IMPLEMENTS: spellcraft-adc-026
+data Expression
+  = LiteralExpr Literal
+  | IdentifierExpr Identifier
+  | BinaryExpr BinaryOp Expression Expression
+  | UnaryExpr UnaryOp Expression
+  | FunctionCall Identifier [Expression]
+  | IndexedName Expression Expression  -- ADC-022
+  | SliceName Expression SliceDirection Expression Expression  -- ADC-017
+  | AttributeExpr Expression Identifier [Expression]  -- ADC-016
+  | AggregateExpr [(Maybe Expression, Expression)]  -- ADC-015
+  | SelectedName Expression Identifier  -- ADC-026: Record field access
+  deriving (Show, Eq)
+```
+
+## Phase 2: Modify Expression Parser
+
+**File:** `src/VHDL/Parser.hs`
+
+**Strategy:** Parse selected names as postfix operators (like attributes)
+
+```haskell
+-- ADC-IMPLEMENTS: spellcraft-adc-026
+parsePrimaryExpr :: Parser Expression
+parsePrimaryExpr = do
+  base <- choice
+    [ try parseAggregate
+    , try (parens parseExpression)
+    , try parseLiteral
+    , try parseFunctionCallOrIndexed
+    , IdentifierExpr <$> identifier
+    ]
+  -- Parse postfix operators: attributes and selected names
+  postfix <- many $ choice
+    [ try parseAttributePostfix  -- 'attribute or 'attribute(params)
+    , try parseSelectedNamePostfix  -- .field
+    ]
+  pure $ foldl applyPostfix base postfix
+
+data PostfixOp
+  = AttributeOp Identifier [Expression]
+  | SelectOp Identifier
+
+parseSelectedNamePostfix :: Parser PostfixOp
+parseSelectedNamePostfix = do
+  void $ symbol "."
+  field <- identifier
+  pure $ SelectOp field
+
+applyPostfix :: Expression -> PostfixOp -> Expression
+applyPostfix expr (AttributeOp name params) = AttributeExpr expr name params
+applyPostfix expr (SelectOp field) = SelectedName expr field
+```
+
+**Critical Fix:** Prevent infinite loop by ensuring dot is consumed atomically:
+- Use `symbol "."` which handles spacing correctly
+- Fail fast if no identifier follows dot
+
+## Phase 3: Handle Mixed Indexing
+
+Selected names can be combined with indexing in either order:
+- `array(i).field` - Index first, then select
+- `record.field(i)` - Select first, then index
+
+**Current Approach:** `parseFunctionCallOrIndexed` already returns an Expression, and we apply selected names as postfix. This naturally handles `array(i).field`.
+
+For `record.field(i)`, the selected name is parsed first, then `parseFunctionCallOrIndexed` won't match (no parens immediately after base identifier), so we need to extend postfix parsing to handle indexing/slicing after selection.
+
+**Refined Strategy:** Parse all postfix operations in a unified way:
+
+```haskell
+-- ADC-IMPLEMENTS: spellcraft-adc-026
+postfixExpr :: Expression -> Parser Expression
+postfixExpr base = do
+  ops <- many $ choice
+    [ try $ do  -- Indexing/slicing: (expr) or (expr downto/to expr)
+        result <- parens $ do
+          firstExpr <- parseExpression
+          choice
+            [ try $ do
+                dir <- try (keyword "downto" >> pure DownTo) <|> (keyword "to" >> pure To)
+                secondExpr <- parseExpression
+                pure $ Right (dir, firstExpr, secondExpr)
+            , do
+                rest <- many $ try $ (comma >> parseExpression)
+                pure $ Left (firstExpr : rest)
+            ]
+        pure $ case result of
+          Right (dir, high, low) -> SliceOp dir high low
+          Left [single] -> IndexOp single
+          Left exprs -> FunctionCallOp exprs
+    , try $ do  -- Attribute: 'name or 'name(params)
+        void $ char '\''
+        lookAhead $ satisfy (\c -> isAlpha c || c == '_')
+        name <- identifier
+        params <- option [] $ try $ parens $ parseExpression `sepBy` comma
+        pure $ AttributeOp name params
+    , try $ do  -- Selected name: .field
+        void $ symbol "."
+        field <- identifier
+        pure $ SelectOp field
+    ]
+  pure $ foldl applyPostfixOp base ops
+```
+
+## Phase 4: Update Expression Show Instance
+
+Ensure SelectedName has proper Show instance for debugging:
+
+```haskell
+instance Show Expression where
+  ...
+  show (SelectedName expr field) = show expr ++ "." ++ T.unpack field
+  ...
+```
+
+# Parity
+
+## File Locations
+- Contract: `/Users/tad/t4mber/spellcraft/contracts/adc-026-selected-name-parsing.qmd`
+- AST: `/Users/tad/t4mber/spellcraft/src/VHDL/AST.hs`
+- Parser: `/Users/tad/t4mber/spellcraft/src/VHDL/Parser.hs`
+- Tests: `/Users/tad/t4mber/spellcraft/test/fixtures/test_selected_name_*.vhd`
+
+# Requirements
+
+## Functional
+
+### Must Support
+1. Simple field access: `signal.field`
+2. Nested field access: `signal.field1.field2`
+3. Selected names in all expression contexts:
+   - Signal assignments: `result <= data.field;`
+   - Port maps: `port map (p => sig.field)`
+   - Conditions: `if data.flag = '1' then`
+   - Arithmetic: `result <= data.x + data.y`
+4. Mixed with indexing: `array(i).field` and `record.field(i)`
+5. Mixed with attributes: `signal.field'length`
+
+### Nice to Have
+6. Better error messages for malformed selected names
+7. Type checking for record field existence (future)
+
+## Non-Functional
+
+1. **No infinite loops**: Parser must fail fast on invalid syntax
+2. **Performance**: <5% parsing slowdown acceptable
+3. **Backward compatibility**: All existing tests must still pass
+4. **Parse rate target**: 65% → 80%+ (unblock 6 of 8 remaining files)
+
+# Test Plan
+
+## Unit Tests
+
+### Test 1: Simple Field Access
+```vhdl
+-- test/fixtures/test_selected_name_simple.vhd
+entity test_selected_name_simple is
+    port (clk : in std_logic);
+end test_selected_name_simple;
+
+architecture rtl of test_selected_name_simple is
+    type t_data is record
+        value : unsigned(7 downto 0);
+        valid : std_logic;
+    end record;
+
+    signal data : t_data;
+    signal result : unsigned(7 downto 0);
+begin
+    result <= data.value;
+end architecture;
+```
+
+### Test 2: Nested Field Access
+```vhdl
+-- test/fixtures/test_selected_name_nested.vhd
+architecture rtl of test is
+    type t_inner is record
+        flag : std_logic;
+    end record;
+
+    type t_outer is record
+        inner : t_inner;
+    end record;
+
+    signal packet : t_outer;
+    signal flag_out : std_logic;
+begin
+    flag_out <= packet.inner.flag;
+end architecture;
+```
+
+### Test 3: Port Map with Selected Names
+```vhdl
+-- test/fixtures/test_selected_name_portmap.vhd
+-- Use existing test_portmap_record_field.vhd
+-- Should parse without hanging
+```
+
+### Test 4: Mixed Indexing
+```vhdl
+-- test/fixtures/test_selected_name_indexed.vhd
+architecture rtl of test is
+    type t_elem is record
+        data : unsigned(7 downto 0);
+    end record;
+
+    type t_array is array (0 to 3) of t_elem;
+    signal arr : t_array;
+    signal result : unsigned(7 downto 0);
+begin
+    result <= arr(2).data;
+end architecture;
+```
+
+## Integration Tests
+
+### Corpus Tests
+1. ✅ lumarian/lumarian.vhd - Primary blocker with `data_in.avid`
+2. ✅ Other files using record types (expect 6+ files to unblock)
+
+### Regression Tests
+All 15 currently passing files must still parse successfully.
+
+## Performance Tests
+- Parse time for lumarian.vhd: <2 seconds
+- No memory leaks during selected name parsing
+
+# Success Criteria
+
+## Minimum (Must Achieve)
+1. ✅ SelectedName constructor added to Expression AST
+2. ✅ Simple field access parses: `signal.field`
+3. ✅ test_selected_name_simple.vhd parses successfully
+4. ✅ No infinite loops on selected names
+5. ✅ Parse rate: 65% → 70%+ (16/23 files)
+
+## Target (Should Achieve)
+1. ✅ Nested field access works: `signal.field1.field2`
+2. ✅ Selected names work in port maps
+3. ✅ test_portmap_record_field.vhd parses (currently hangs)
+4. ✅ lumarian.vhd parses successfully
+5. ✅ Parse rate: 65% → 80%+ (18/23 files)
+6. ✅ All regression tests pass
+
+## Stretch (Nice to Have)
+1. ✅ Mixed indexing: `array(i).field` and `record.field(i)`
+2. ✅ Parse rate: 65% → 85%+ (20/23 files)
+3. ✅ Clean implementation without hacky workarounds
+
+# Empirical Validation
+
+## Pre-Implementation
+- Parse rate: 65% (15/23 files)
+- Blocker: Selected names cause infinite loop
+- Test: test_portmap_record_field.vhd hangs
+
+## Implementation Attempt 1 (BLOCKED)
+- Status: Parser implementation causes hangs
+- Issue: Unified postfix operator parsing (attributes + selected names) triggers infinite loop
+- Test: Even minimal files (test_minimal_parse.vhd) hang with timeout
+- Root cause: Unclear - possibly interaction with tracing, expression recursion, or operator precedence
+- Next action: Remove all ADC-025 Phase 2 tracing, attempt simpler implementation
+
+## Post-Implementation (Target)
+- Parse rate: 80%+ (18/23 files)
+- No infinite loops
+- Test: test_portmap_record_field.vhd parses in <1s
+- lumarian.vhd parses successfully
+
+# References
+
+- Related: ADC-025 (Advanced Parsing - identified blocker)
+- Related: ADC-022 (Indexed Assignments - similar postfix parsing)
+- Related: ADC-016 (Attributes - postfix operator precedent)
+- VHDL LRM: Section 8.7 (Selected Names)
+- VHDL LRM: Section 6.6 (Names)
+- Blocker for: 35% of LZX corpus (8/23 files)

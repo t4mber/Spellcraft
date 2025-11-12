@@ -1,0 +1,295 @@
+---
+title: "ADC-024: Case Statement Parsing Fix"
+id: spellcraft-adc-024
+status: active
+created: 2025-11-10
+updated: 2025-11-10
+---
+
+# Purpose
+
+Fix the VHDL parser's case statement implementation which currently fails to parse even simple case constructs. Case statements are fundamental VHDL constructs used in 9 out of 9 remaining failing files (100% of blockers).
+
+## Background
+
+The parser includes a `parseCaseStatement` function (src/VHDL/Parser.hs:586-608), but testing reveals it completely fails to parse valid case statements:
+
+```vhdl
+process(clk)
+begin
+  case s_mode is
+    when "000" =>
+      s_data <= '0';
+    when others =>
+      s_data <= '1';
+  end case;
+end process;
+```
+
+This results in "Parsed 0 statements" indicating complete parsing failure.
+
+**Impact**: 9/23 LZX corpus files cannot parse (39% of corpus blocked)
+**Current parse rate**: 60% (14/23 files)
+**Target parse rate**: 90%+ (21/23 files)
+
+# Interface
+
+## AST Structure (Already Defined)
+
+The AST already includes case statement support:
+
+```haskell
+-- Already exists in src/VHDL/AST.hs
+data Statement
+  = ...
+  | CaseStatement
+      { stmtCaseExpr :: Expression
+      , stmtWhenClauses :: [(Expression, [Statement])]
+      , stmtLocation :: SourceLocation
+      }
+  deriving (Show, Eq, Generic)
+```
+
+## Parser Structure (Already Defined)
+
+Parser exists but is broken:
+
+```haskell
+-- src/VHDL/Parser.hs:586-608
+parseCaseStatement :: Parser Statement
+parseCaseStatement = do
+  pos <- getSourcePos
+  void $ keyword "case"
+  expr <- parseExpression
+  void $ keyword "is"
+  whenClauses <- many (try parseWhenClause)
+  void $ keyword "end"
+  void $ keyword "case"
+  void semi
+  pure CaseStatement
+    { stmtCaseExpr = expr
+    , stmtWhenClauses = whenClauses
+    , stmtLocation = sourcePosToLocation pos
+    }
+  where
+    parseWhenClause = do
+      void $ keyword "when"
+      choice <- parseExpression <|> (keyword "others" >> pure (IdentifierExpr "others"))
+      void $ symbol "=>"
+      stmts <- many (try (notFollowedBy nextWhenOrEnd >> parseSequentialStatement))
+      pure (choice, stmts)
+    nextWhenOrEnd = choice [keyword "when", keyword "end"]
+```
+
+# Implementation
+
+## Root Cause Analysis Required
+
+The parser structure appears correct, but empirical testing shows complete failure. Investigation must determine:
+
+1. **Expression parsing issue**: Does `parseExpression` fail on case expression?
+2. **Keyword parsing issue**: Does `keyword "is"` fail to match?
+3. **When clause parsing**: Does `parseWhenClause` fail to parse conditions?
+4. **Statement recursion**: Do nested statements fail to parse?
+5. **Backtracking issue**: Does `try` combinator fail to enable proper backtracking?
+
+## Debugging Protocol
+
+### Step 1: Minimal Test Case
+
+Create `/tmp/test_case_minimal.vhd`:
+```vhdl
+library ieee;
+use ieee.std_logic_1164.all;
+
+entity test_case_minimal is
+  port (clk : in std_logic);
+end test_case_minimal;
+
+architecture rtl of test_case_minimal is
+  signal s_data : std_logic;
+begin
+  process(clk)
+  begin
+    case clk is
+      when '0' => s_data <= '0';
+      when others => s_data <= '1';
+    end case;
+  end process;
+end architecture;
+```
+
+### Step 2: Add Tracing
+
+Add debug traces to identify failure point:
+```haskell
+parseCaseStatement = trace "parseCaseStatement ENTER" $ do
+  pos <- getSourcePos
+  trace "Parsing 'case' keyword" $ void $ keyword "case"
+  trace "Parsing case expression" $ expr <- parseExpression
+  trace ("Case expr: " ++ show expr) $ void $ keyword "is"
+  trace "Parsing when clauses" $ whenClauses <- many (try parseWhenClause)
+  trace ("Parsed " ++ show (length whenClauses) ++ " when clauses") $
+    void $ keyword "end"
+  -- ... rest
+```
+
+### Step 3: Isolate When Clause Parsing
+
+Test if `parseWhenClause` can parse:
+```haskell
+parseWhenClause = trace "parseWhenClause ENTER" $ do
+  trace "Parsing 'when' keyword" $ void $ keyword "when"
+  trace "Parsing choice" $ choice <- parseExpression <|> (keyword "others" >> pure (IdentifierExpr "others"))
+  trace ("Choice: " ++ show choice) $ void $ symbol "=>"
+  trace "Parsing statements" $ stmts <- many (try (notFollowedBy nextWhenOrEnd >> parseSequentialStatement))
+  trace ("Parsed " ++ show (length stmts) ++ " statements") $ pure (choice, stmts)
+```
+
+### Step 4: Fix Identified Issue
+
+Based on trace output, apply targeted fix. Common issues:
+
+**Issue A: `others` keyword conflict**
+- `keyword "others"` might fail due to keyword parser behavior
+- Fix: Use `try` wrapper or custom parser
+
+**Issue B: Choice expression parsing**
+- String literals like `"000"` might not parse correctly
+- Fix: Ensure `parseLiteral` handles bit string literals
+
+**Issue C: Statement recursion**
+- `parseSequentialStatement` might not be called in proper context
+- Fix: Ensure proper parser state and backtracking
+
+**Issue D: `end case` parsing**
+- Two-keyword sequence might fail
+- Fix: Verify `keyword` consumes whitespace correctly
+
+## Files to Modify
+
+1. **src/VHDL/Parser.hs**: Fix `parseCaseStatement` implementation
+2. **test/fixtures/test_case.vhd**: Create test fixture
+3. **test/fixtures/README_TEST_CASES.md**: Document case statement test
+
+# Parity
+
+## File Locations
+
+- Contract: `/Users/tad/t4mber/spellcraft/contracts/adc-024-case-statement-parsing.qmd`
+- Parser: `/Users/tad/t4mber/spellcraft/src/VHDL/Parser.hs:586-608`
+- Test: `/Users/tad/t4mber/spellcraft/test/fixtures/test_case.vhd`
+
+# Requirements
+
+## Functional
+
+1. Parse simple case statement with literal choices
+2. Parse case statement with `others` clause
+3. Parse case statement with expression choices
+4. Parse nested statements inside when clauses
+5. Parse multiple when clauses
+6. Handle comments within case statements
+
+## Non-Functional
+
+1. All existing tests must pass
+2. Parse rate improvement from 60% to 90%+ expected (9 files affected)
+3. No performance regression
+4. Clear error messages for malformed case statements
+
+# Test Plan
+
+## Unit Tests
+
+### Test 1: Minimal Case Statement
+```vhdl
+case s_mode is
+  when '0' => s_data <= '0';
+  when others => s_data <= '1';
+end case;
+```
+
+### Test 2: Multiple When Clauses
+```vhdl
+case s_mode is
+  when "000" => s_data <= to_signed(0, 8);
+  when "001" => s_data <= to_signed(1, 8);
+  when "010" => s_data <= to_signed(2, 8);
+  when others => s_data <= to_signed(-1, 8);
+end case;
+```
+
+### Test 3: Multiple Statements Per When
+```vhdl
+case s_mode is
+  when "000" =>
+    s_data_out <= s_data_in;
+    s_valid <= '1';
+  when others =>
+    s_data_out <= (others => '0');
+    s_valid <= '0';
+end case;
+```
+
+### Test 4: Nested Case Statements
+```vhdl
+case s_outer is
+  when "00" =>
+    case s_inner is
+      when '0' => s_result <= '0';
+      when '1' => s_result <= '1';
+      when others => s_result <= 'X';
+    end case;
+  when others =>
+    s_result <= 'Z';
+end case;
+```
+
+## Integration Tests
+
+Test on failing files from LZX corpus:
+1. `contrib/lzx/lumarian/complex_rectifier_inverter.vhd` - 8 when clauses
+2. `contrib/lzx/lumarian/lumarian.vhd` - nested case statements
+3. `contrib/lzx/mirrorbound/edge_detector.vhd` - case with complex expressions
+
+## Regression Tests
+
+All 14 currently passing files must still parse:
+- Verify no impact on process parsing
+- Verify no impact on if statement parsing
+- Verify no impact on assignment parsing
+
+# Success Criteria
+
+1. ✅ `/tmp/test_case_minimal.vhd` parses successfully
+2. ✅ All 4 unit tests parse successfully
+3. ✅ At least 7/9 failing files now parse (target: 21/23 total = 91%)
+4. ✅ All 14 previously passing files still pass
+5. ✅ Case statement appears correctly in AST output
+6. ✅ Signal usage tracking works within case statements
+
+# Empirical Validation
+
+## Pre-Implementation Metrics
+- Parse rate: 60% (14/23 files)
+- Files blocked by case statements: 9
+- Test case result: FAIL - "Parsed 0 statements"
+
+## Post-Implementation Metrics (Target)
+- Parse rate: 90%+ (21/23 files)
+- Files blocked by case statements: 0-2
+- Test case result: PASS - "Parsed 1 statement"
+- Regression: 0 previously passing files broken
+
+## Performance Metrics
+- Parse time delta: <5% increase acceptable
+- Memory usage: No significant increase
+- Error message quality: Clear indication of case statement syntax errors
+
+# References
+
+- VHDL LRM: Section 8.8 (Case Statements)
+- Related: ADC-013 (Process Parsing) - provides statement parsing context
+- Related: ADC-023 (TO Slice Fix) - similar backtracking issue pattern
+- Blocker for: 9/23 LZX corpus files

@@ -88,6 +88,11 @@ data ConstraintViolation
       , violationMaxFanOut :: Int
       , violationLocation :: SourceLocation
       }
+  | SignalUsageViolation
+      { violationSignalName :: Text
+      , violationDescription :: Text
+      , violationLocation :: SourceLocation
+      }
   deriving (Show, Eq, Generic)
 
 instance ToJSON ConstraintViolation

@@ -6,21 +6,32 @@ module VHDL.Analysis.FrequencyCalc
 import Data.List (find)
 import Data.Text (Text)
 import qualified Data.Text as T
-import VHDL.AST (Identifier, Value(..))
+import VHDL.AST (Identifier, Value(..), Expression(..), Literal(..))
 import VHDL.Analysis.ClockGraph (AnalysisError(..))
 import VHDL.Constraint.Types (ComponentSpec(..), GenericConstraint(..))
 import VHDL.SourceLocation (mkSourceLocation)
 
 -- | Calculate output frequency for a component given its generics and input frequency
 -- Contract: spellcraft-adc-003 Section: Interface
+-- ADC-IMPLEMENTS: spellcraft-adc-020
+-- Convert Expression to Value for frequency calculation (simple literals only)
+exprToValue :: Expression -> Maybe Value
+exprToValue (LiteralExpr (IntLiteral i)) = Just (IntValue i)
+exprToValue (LiteralExpr (RealLiteral r)) = Just (RealValue r)
+exprToValue (LiteralExpr (StringLiteral s)) = Just (StringValue s)
+exprToValue (IdentifierExpr id) = Just (IdentifierValue id)
+exprToValue _ = Nothing  -- Complex expressions not yet supported
+
 calculateOutputFrequency
   :: ComponentSpec
-  -> [(Identifier, Value)]  -- Generic map
+  -> [(Identifier, Expression)]  -- Generic map (changed from Value)
   -> Double  -- Input frequency (MHz)
   -> Either AnalysisError Double
 calculateOutputFrequency spec generics inputFreq =
-  case compSpecName spec of
-    "PLL_1" -> calculatePLLOutput generics inputFreq
+  -- Convert expressions to values (filter out complex ones)
+  let valueGenerics = [(name, val) | (name, expr) <- generics, Just val <- [exprToValue expr]]
+  in case compSpecName spec of
+    "PLL_1" -> calculatePLLOutput valueGenerics inputFreq
     "YPbPr_Encoder_A" -> pure inputFreq  -- Pass-through
     _ -> pure inputFreq  -- Default: pass-through
 

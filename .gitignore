@@ -55,3 +55,6 @@ build.log
 .DS_Store
 Thumbs.db
 
+# Contributed code for testing (tracked separately via contrib/CONTRIB_CHANGES.md)
+contrib/
+!contrib/CONTRIB_CHANGES.md

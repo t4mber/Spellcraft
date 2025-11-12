@@ -47,6 +47,17 @@ formatViolation fmt (FanOutViolation comp port actualFanOut maxFanOut loc) =
     JSON -> T.pack $ printf "{\"type\":\"FanOutViolation\",\"component\":\"%s\",\"port\":\"%s\",\"actual\":%d,\"max\":%d}"
       (T.unpack comp) (T.unpack port) actualFanOut maxFanOut
 
+-- | Format signal usage violation
+-- Contract: spellcraft-adc-012 Section: Signal Usage Tracker
+formatViolation fmt (SignalUsageViolation sigName desc loc) =
+  case fmt of
+    HumanReadable -> T.pack $ printf "%s: error: %s\n  Signal: '%s'"
+      (T.unpack $ formatLocation loc) (T.unpack desc) (T.unpack sigName)
+    GCC -> T.pack $ printf "%s: error: %s: %s"
+      (T.unpack $ formatLocation loc) (T.unpack desc) (T.unpack sigName)
+    JSON -> T.pack $ printf "{\"type\":\"SignalUsageViolation\",\"signal\":\"%s\",\"description\":\"%s\"}"
+      (T.unpack sigName) (T.unpack desc)
+
 -- | Format complexity warning
 -- Contract: spellcraft-adc-005 Section: Interface
 formatComplexityWarning :: OutputFormat -> ComplexityWarning -> Text

@@ -1,0 +1,90 @@
+---
+title: "ADC-018: VHDL Signal Initialization"
+id: spellcraft-adc-018
+version: 1.0.0
+status: active
+priority: high
+created: 2025-11-10
+---
+
+## Purpose
+
+Implement VHDL signal initialization syntax (`signal name : type := initial_value;`) to enable parsing of designs with reset values. Currently the parser only handles signal declarations without initial values.
+
+**Business Impact:** ~60% of VHDL designs use signal initialization for proper reset behavior. Without this, the parser cannot handle most production code.
+
+## Problem Statement
+
+### Current Behavior
+- Signal without init works: `signal s_temp : std_logic;` ✅
+- Signal with init fails: `signal s_temp : std_logic := '0';` ❌
+- Parser expects `;` immediately after type, fails when seeing `:=`
+
+### Example Failures
+```vhdl
+-- Fails: Simple initialization
+signal s_counter : integer := 0;
+
+-- Fails: Aggregate initialization
+signal s_sum : signed(7 downto 0) := (others => '0');
+
+-- Fails: Expression initialization
+signal s_default : unsigned(3 downto 0) := to_unsigned(5, 4);
+```
+
+## Requirements
+
+### FR-1: Parse Signal Initialization
+**Priority:** Critical
+
+Parser MUST support optional `:= expression` after signal type.
+
+**Acceptance Criteria:**
+- ✅ Parse signals with literal init values
+- ✅ Parse signals with aggregate init values
+- ✅ Parse signals with expression init values
+- ✅ Backward compatible with signals without init
+
+## Implementation Strategy
+
+### AST Changes
+```haskell
+data SignalDecl = SignalDecl
+  { sigName :: Identifier
+  , sigType :: TypeName
+  , sigInitValue :: Maybe Expression  -- NEW: optional init value
+  , sigLocation :: SourceLocation
+  }
+```
+
+### Parser Changes
+```haskell
+-- In parseSignalDecl function
+parseSignalDecl :: Parser SignalDecl
+parseSignalDecl = do
+  void $ keyword "signal"
+  name <- identifier
+  void colon
+  typ <- typeSpec
+  -- NEW: Check for optional initialization
+  initValue <- optional $ try $ do
+    void $ symbol ":="
+    parseExpression
+  void semi
+  pure SignalDecl
+    { sigName = name
+    , sigType = typ
+    , sigInitValue = initValue  -- Store it
+    , sigLocation = ...
+    }
+```
+
+## Success Metrics
+- test/fixtures/signal_init.vhd parses ✅
+- LZX parse rate > 50%
+- All 36 tests still pass
+
+---
+
+**Contract Status**: Active
+**Owner**: Parser Team

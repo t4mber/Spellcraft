@@ -1,0 +1,480 @@
+---
+title: "ADC-012: VHDL Violation Detection Framework"
+date: 2025-11-09
+status: partial
+priority: 1
+---
+
+## Contract Metadata
+
+- **Contract ID**: spellcraft-adc-012
+- **Title**: VHDL Violation Detection Framework
+- **Date Issued**: 2025-11-09
+- **Status**: Partial (Priority 1 implemented, 2-3 pending)
+- **Depends On**: ADC-011 (Kaos Elf), Parser Implementation
+- **Iteration**: 2
+- **Last Updated**: 2025-11-10
+
+## Purpose
+
+Implement static analysis violation detection based on priorities identified in KAOS_ELF_EVALUATION_REPORT.md. The kaos elf evaluation revealed 0% detection rate on expected violations (Levels 1-3). This contract addresses the three highest-priority detection gaps.
+
+## Motivation
+
+**Current State**:
+- Parser: 100% success rate (23/23 files)
+- Detection: 0% success rate (0/3 expected violations)
+- Clock analysis: Basic infrastructure exists but no violations reported
+
+**Evaluation Results** (from KAOS_ELF_EVALUATION_REPORT.md):
+- Level 1 (Obvious): Undriven signal `THIS_SIGNAL_IS_NEVER_USED` - ✅ DETECTED (as of 2025-11-10)
+- Level 2 (Moderate): Latch inference from incomplete assignment - NOT DETECTED ❌
+- Level 3 (Subtle): Silent overflow in counter - NOT DETECTED ❌
+- Level 5 (Extremely Subtle): Delta cycle race - correctly not detected ✓
+
+**Implementation Status** (2025-11-10):
+- Priority 1 (Signal Usage): ✅ Implemented, detecting Level 1 violations
+- Priority 2 (Control Flow): ⏳ Pending
+- Priority 3 (Arithmetic): ⏳ Pending
+- False Positive Rate: 100% due to missing process parsing (see ADC-013)
+
+**Gap Analysis**:
+1. No signal usage tracking (declarations vs assignments)
+2. No control flow analysis (conditional assignments)
+3. No arithmetic bounds checking (overflow detection)
+
+## Scope
+
+### In Scope
+
+**Priority 1 - Signal Usage Tracker** (Week 1):
+- Track all signal declarations in architectures
+- Track all signal assignments in processes/concurrent statements
+- Detect completely undriven signals (no assignments)
+- Detect unused signals (no reads)
+- Report violations with location information
+
+**Priority 2 - Control Flow Analysis** (Week 2-3):
+- Build control flow graph for process statements
+- Track signal assignments per code path
+- Detect incomplete assignment coverage (latch inference)
+- Handle if/elsif/else, case statements
+- Report potential latch synthesis
+
+**Priority 3 - Arithmetic Bounds Checker** (Week 4):
+- Track bit widths through expressions
+- Detect potential overflows in arithmetic operations
+- Identify counters/accumulators without saturation
+- Suggest overflow protection points
+- Report silent overflow risks
+
+### Out of Scope
+
+- Delta cycle analysis (requires simulation)
+- Comprehensive CDC detection (future work)
+- Timing constraint validation (synthesis tool domain)
+- Resource utilization estimation (synthesis tool domain)
+
+## Deliverables
+
+### Module Structure
+
+```
+src/VHDL/Analysis/
+├── SignalUsage.hs        (Priority 1)
+├── ControlFlow.hs        (Priority 2)
+├── ArithmeticBounds.hs   (Priority 3)
+└── ViolationReport.hs    (Common reporting)
+```
+
+### Priority 1: Signal Usage Tracker
+
+**Module**: `src/VHDL/Analysis/SignalUsage.hs`
+
+**Data Types**:
+```haskell
+data SignalInfo = SignalInfo
+  { sigName :: Identifier
+  , sigType :: TypeMark
+  , sigDeclLocation :: SourceLocation
+  , sigAssignments :: [SourceLocation]
+  , sigReads :: [SourceLocation]
+  }
+
+data SignalViolation
+  = UndrivenSignal Identifier SourceLocation
+  | UnusedSignal Identifier SourceLocation
+```
+
+**Interface**:
+```haskell
+-- Analyze architecture for signal usage
+analyzeSignalUsage :: Architecture -> [SignalViolation]
+
+-- Track declarations from architecture signal list
+collectSignalDecls :: Architecture -> [SignalInfo]
+
+-- Track assignments from statements
+collectSignalAssignments :: [Statement] -> Map Identifier [SourceLocation]
+
+-- Track reads from expressions
+collectSignalReads :: [Statement] -> Map Identifier [SourceLocation]
+```
+
+**Detection Logic**:
+1. Traverse architecture declarative part, collect all signal declarations
+2. Traverse all statements (process/concurrent), collect assignments to signals
+3. Traverse all expressions, collect reads from signals
+4. For each signal:
+   - If `sigAssignments == []`: Report `UndrivenSignal`
+   - If `sigReads == []`: Report `UnusedSignal`
+
+**Expected Results**:
+- Detect `THIS_SIGNAL_IS_NEVER_USED` in `enhance-level1-undriven.vhd:41`
+- Report violation with file, line, column
+
+### Priority 2: Control Flow Analysis
+
+**Module**: `src/VHDL/Analysis/ControlFlow.hs`
+
+**Data Types**:
+```haskell
+data ControlFlowGraph = CFG
+  { cfgNodes :: [CFGNode]
+  , cfgEdges :: [(NodeId, NodeId, Condition)]
+  , cfgEntry :: NodeId
+  , cfgExit :: NodeId
+  }
+
+data CFGNode
+  = AssignmentNode Identifier Expression SourceLocation
+  | ConditionalNode Expression SourceLocation
+  | MergeNode SourceLocation
+
+data PathCoverage = PathCoverage
+  { pcSignal :: Identifier
+  , pcPaths :: [Path]
+  , pcCovered :: [Path]  -- Paths that assign signal
+  , pcUncovered :: [Path] -- Paths that don't assign signal
+  }
+```
+
+**Interface**:
+```haskell
+-- Build CFG from process statement body
+buildCFG :: ProcessStatement -> ControlFlowGraph
+
+-- Analyze all paths through CFG
+analyzePathCoverage :: ControlFlowGraph -> Identifier -> PathCoverage
+
+-- Detect incomplete assignments (latch inference)
+detectLatchInference :: ProcessStatement -> [SignalViolation]
+```
+
+**Detection Logic**:
+1. For each process with sensitivity list or clocked:
+   - Build CFG from statement sequence
+   - For each signal assigned in process:
+     - Find all paths from entry to exit
+     - Check if signal is assigned on every path
+     - If any path lacks assignment: Report latch inference
+
+**Expected Results**:
+- Detect `s_sometimes_driven` in `enhance-level2-partial.vhd:41`
+- Report: "Signal assigned in some paths but not others (latch inference)"
+
+### Priority 3: Arithmetic Bounds Checker
+
+**Module**: `src/VHDL/Analysis/ArithmeticBounds.hs`
+
+**Data Types**:
+```haskell
+data BitWidth = BitWidth
+  { bwMin :: Integer
+  , bwMax :: Integer
+  , bwActual :: Int  -- Declared bit width
+  }
+
+data ArithmeticViolation
+  = PotentialOverflow
+      { ovSignal :: Identifier
+      , ovOperation :: String
+      , ovLocation :: SourceLocation
+      , ovDeclaredWidth :: Int
+      , ovRequiredWidth :: Int
+      }
+  | UnboundedCounter
+      { ucSignal :: Identifier
+      , ucLocation :: SourceLocation
+      }
+```
+
+**Interface**:
+```haskell
+-- Calculate expression bit width requirements
+calcExpressionWidth :: Expression -> BitWidth
+
+-- Track counter patterns (signal <= signal + constant)
+detectCounters :: ProcessStatement -> [Identifier]
+
+-- Check for overflow risks
+checkArithmeticBounds :: Architecture -> [ArithmeticViolation]
+```
+
+**Detection Logic**:
+1. Identify counter patterns: `signal <= signal + N`
+2. Check if counter has bounds checking (if/when with comparison)
+3. For arithmetic operations:
+   - Calculate required bit width from operands
+   - Compare to declared signal width
+   - If insufficient: Report overflow risk
+
+**Expected Results**:
+- Detect `s_accumulator <= s_accumulator + 1` in `enhance-level3-bitgrowth.vhd:51`
+- Report: "Counter without overflow protection will silently wrap"
+
+### Common Violation Reporting
+
+**Module**: `src/VHDL/Analysis/ViolationReport.hs`
+
+**Data Types**:
+```haskell
+data Violation = Violation
+  { vType :: ViolationType
+  , vSeverity :: Severity
+  , vMessage :: String
+  , vLocation :: SourceLocation
+  , vSuggestion :: Maybe String
+  }
+
+data ViolationType
+  = SignalUsageViolation
+  | ControlFlowViolation
+  | ArithmeticViolation
+  | ClockViolation
+  | TimingViolation
+
+data Severity = Error | Warning | Info
+```
+
+**Interface**:
+```haskell
+-- Format violation for display
+formatViolation :: Violation -> String
+
+-- Collect all violations from analysis passes
+collectViolations :: Architecture -> [Violation]
+
+-- Integration point for Main.hs
+reportViolations :: [Violation] -> IO ()
+```
+
+## Integration
+
+### Main.hs Integration
+
+```haskell
+-- In runAnalysis function
+runAnalysis :: [FilePath] -> IO ()
+runAnalysis files = do
+  -- ... existing parsing ...
+
+  forM_ designs $ \design -> do
+    putStrLn $ "=== Analyzing Design: " ++ designName design ++ " ==="
+
+    -- NEW: Signal usage analysis
+    let signalViolations = analyzeSignalUsage (designArch design)
+
+    -- NEW: Control flow analysis
+    let controlViolations = analyzeControlFlow (designArch design)
+
+    -- NEW: Arithmetic bounds checking
+    let arithmeticViolations = checkArithmeticBounds (designArch design)
+
+    -- Collect all violations
+    let allViolations = signalViolations ++ controlViolations ++ arithmeticViolations
+
+    -- Report
+    reportViolations allViolations
+```
+
+## Validation Criteria
+
+### Success Metrics
+
+**Phase 1 - Signal Usage Tracker**:
+- ✅ Detects `THIS_SIGNAL_IS_NEVER_USED` in level1-undriven.vhd
+- ✅ Reports correct line number (41) and file
+- ✅ No false positives on clean Lumarian files
+
+**Phase 2 - Control Flow Analysis**:
+- ✅ Detects `s_sometimes_driven` latch in level2-partial.vhd
+- ✅ Correctly identifies incomplete assignment paths
+- ✅ Handles if/elsif/else and case statements
+
+**Phase 3 - Arithmetic Bounds Checker**:
+- ✅ Detects unbounded counter in level3-bitgrowth.vhd
+- ✅ Reports overflow risk with declared vs required width
+- ✅ No false positives on saturating counters
+
+**Overall**:
+- Detection rate: 3/3 expected violations (100%)
+- False positive rate: < 5% on clean corpus
+- Performance: < 2s analysis time on chaos corpus
+
+### Test Corpus
+
+**Primary Test**: Kaos elf corpus
+```bash
+stack exec spellcraft -- contrib/lzx-kaos-levels/*.vhd
+```
+
+**Expected Output**:
+```
+Parse results - VHDL errors: 0, designs: 4, Clash violations: 3
+
+=== Violations Found ===
+
+[ERROR] Signal Usage: Undriven signal
+  File: contrib/lzx-kaos-levels/enhance-level1-undriven.vhd:41
+  Signal: THIS_SIGNAL_IS_NEVER_USED
+  Description: Signal declared but never assigned
+
+[WARNING] Control Flow: Potential latch inference
+  File: contrib/lzx-kaos-levels/enhance-level2-partial.vhd:41
+  Signal: s_sometimes_driven
+  Description: Signal assigned in some code paths but not others
+
+[WARNING] Arithmetic Bounds: Unbounded counter
+  File: contrib/lzx-kaos-levels/enhance-level3-bitgrowth.vhd:51
+  Signal: s_accumulator
+  Description: Counter without overflow protection will silently wrap
+```
+
+**Regression Test**: Clean corpus
+```bash
+stack exec spellcraft -- contrib/lzx/lumarian/*.vhd
+stack exec spellcraft -- contrib/lzx/mirrorbound/*.vhd
+```
+
+Expected: No false positive violations
+
+## Implementation Plan
+
+### Week 1: Signal Usage Tracker
+
+**Day 1-2**: Core module structure
+- Create `src/VHDL/Analysis/SignalUsage.hs`
+- Implement `SignalInfo` and `SignalViolation` types
+- Add AST traversal for signal declarations
+
+**Day 3-4**: Assignment tracking
+- Traverse process statements for assignments
+- Traverse concurrent statements
+- Handle conditional assignments
+
+**Day 5**: Testing and integration
+- Test on level1-undriven.vhd
+- Integrate with Main.hs
+- Validate on clean corpus
+
+### Week 2-3: Control Flow Analysis
+
+**Day 1-3**: CFG construction
+- Create `src/VHDL/Analysis/ControlFlow.hs`
+- Build CFG from sequential statements
+- Handle if/elsif/else branches
+
+**Day 4-5**: Path analysis
+- Implement path traversal
+- Track signal assignments per path
+- Identify uncovered paths
+
+**Day 6-7**: Testing
+- Test on level2-partial.vhd
+- Handle case statements
+- Integration testing
+
+### Week 4: Arithmetic Bounds Checker
+
+**Day 1-2**: Expression analysis
+- Create `src/VHDL/Analysis/ArithmeticBounds.hs`
+- Calculate bit widths from expressions
+- Identify counter patterns
+
+**Day 3-4**: Bounds checking
+- Compare declared vs required widths
+- Detect saturation logic
+- Report overflow risks
+
+**Day 5**: Final validation
+- Test on level3-bitgrowth.vhd
+- Full kaos elf regression
+- Generate updated evaluation report
+
+## Dependencies
+
+**Existing Infrastructure**:
+- VHDL AST types (src/VHDL/AST.hs)
+- Parser (src/VHDL/Parser.hs)
+- SourceLocation tracking
+
+**New Dependencies**:
+- `containers` package (Map, Set)
+- `mtl` package (State monad for traversal)
+
+## Risk Assessment
+
+**Low Risk**:
+- Signal usage tracking (simple AST traversal)
+- Violation reporting infrastructure
+
+**Medium Risk**:
+- Control flow graph construction (complex for nested statements)
+- Path enumeration (potential exponential blowup)
+
+**Mitigation**:
+- Start with simple if/else before case statements
+- Limit path depth for initial implementation
+- Use caching for repeated subexpression analysis
+
+## Success Criteria
+
+**Minimum Viable Product**:
+1. Detects Level 1 violations (undriven signals)
+2. Integrates with existing analyzer
+3. Zero false positives on clean corpus
+
+**Full Implementation**:
+1. Detects Levels 1-3 violations (100% on chaos corpus)
+2. < 5% false positive rate
+3. Clear, actionable violation reports
+4. < 2s analysis time
+
+**Stretch Goals**:
+1. Level 4 violations (CDC detection)
+2. Suggested fixes for violations
+3. Configurable severity levels
+
+## Deliverables Timeline
+
+- **Week 1**: Signal Usage Tracker + Level 1 detection
+- **Week 2-3**: Control Flow Analysis + Level 2 detection
+- **Week 4**: Arithmetic Bounds Checker + Level 3 detection
+- **Week 5**: Updated evaluation report + regression tests
+
+## Acceptance
+
+This contract is accepted when:
+
+1. ✅ All three modules implemented and integrated
+2. ✅ Kaos elf evaluation shows 3/3 detections (100%)
+3. ✅ Clean corpus shows < 5% false positives
+4. ✅ Updated KAOS_ELF_EVALUATION_REPORT.md generated
+5. ✅ All code committed with tests
+
+---
+
+**Contract Status**: Active
+**Next Review**: After Week 1 (Signal Usage Tracker completion)
+**Contact**: Claude Code (Agent)

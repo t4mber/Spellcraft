@@ -1,0 +1,278 @@
+---
+title: "Clock Domain Propagation Analyzer"
+id: "spellcraft-adc-003"
+version: "1.0.0"
+status: "active"
+dependencies: ["spellcraft-adc-001", "spellcraft-adc-002"]
+---
+
+# Purpose
+
+Track clock frequencies as they propagate through a VDHL design from sources (PLLs, oscillators) to sinks (encoders, memory controllers), computing derived frequencies based on component generics (e.g., PLL multiplication factors). Success is achieved when the analyzer can detect the PRD's example violation: a 208MHz clock driving a component with a 165MHz maximum.
+
+# Scope
+
+**In Scope:**
+- Build connectivity graph from component instantiations and port maps
+- Identify clock sources (components with output-only clock ports)
+- Propagate clock frequencies through signal connections
+- Calculate derived frequencies based on generic parameters (PLL MULT_FACTOR, dividers)
+- Detect frequency constraint violations at clock sinks
+- Report violations with source trace (clock source → path → sink)
+
+**Out of Scope:**
+- Multi-cycle path analysis (synthesis tool domain)
+- Clock domain crossing detection (different problem)
+- Glitch analysis or clock jitter
+- Automatic clock constraint generation for synthesis
+- Handling of clock muxes or gated clocks (too complex for prototype)
+
+# Interface
+
+```haskell
+-- Clock domain graph
+data ClockGraph = ClockGraph
+  { cgNodes :: Map SignalName ClockNode
+  , cgEdges :: [ClockEdge]
+  , cgSources :: [ClockSource]
+  } deriving (Show, Eq)
+
+data ClockNode = ClockNode
+  { cnSignal :: SignalName
+  , cnFrequency :: Maybe Double  -- MHz, if known
+  , cnComponent :: Maybe Identifier  -- Component producing this signal
+  , cnPort :: Maybe Identifier  -- Output port name
+  } deriving (Show, Eq)
+
+data ClockEdge = ClockEdge
+  { ceFrom :: SignalName
+  , ceTo :: SignalName
+  , ceComponent :: Identifier  -- Component making the connection
+  , ceInputPort :: Identifier
+  } deriving (Show, Eq)
+
+data ClockSource = ClockSource
+  { csSignal :: SignalName
+  , csFrequency :: Double  -- MHz
+  , csComponent :: Identifier
+  , csPort :: Identifier
+  , csLocation :: SourceLocation
+  } deriving (Show, Eq)
+
+-- Analysis functions
+buildClockGraph
+  :: VDHLDesign
+  -> ComponentLibrary
+  -> Either AnalysisError ClockGraph
+
+propagateFrequencies
+  :: ClockGraph
+  -> ComponentLibrary
+  -> Either AnalysisError ClockGraph
+
+detectFrequencyViolations
+  :: ClockGraph
+  -> ComponentLibrary
+  -> [ConstraintViolation]
+
+-- Frequency calculation for specific components
+calculateOutputFrequency
+  :: ComponentSpec
+  -> [(Identifier, Value)]  -- Generic map
+  -> Double  -- Input frequency
+  -> Either AnalysisError Double
+
+data AnalysisError
+  = UnknownComponent Identifier SourceLocation
+  | MissingGeneric Identifier Identifier SourceLocation
+  | InvalidGenericValue Identifier Value SourceLocation
+  | CircularClockPath [SignalName]
+  | AmbiguousClockSource SignalName [ClockSource]
+  deriving (Show, Eq)
+
+-- Tracing for error reporting
+type ClockPath = [PathStep]
+
+data PathStep = PathStep
+  { psSignal :: SignalName
+  , psComponent :: Maybe Identifier
+  , psFrequency :: Maybe Double
+  } deriving (Show, Eq)
+
+traceClockPath
+  :: ClockGraph
+  -> SignalName  -- Start signal
+  -> SignalName  -- End signal
+  -> Maybe ClockPath
+```
+
+# Constraints
+
+- **Correctness**: Frequency calculations must match manual calculation within 0.1 MHz
+- **Performance**: Analyze designs with 100 components in < 500ms
+- **Completeness**: Detect all direct frequency violations (no false negatives for prototype)
+- **Cycle Handling**: Detect and report circular clock dependencies
+- **Path Tracing**: Always provide source-to-sink path in violation reports
+
+# Parity
+
+**File Structure:**
+```
+src/
+  VDHL/
+    Analysis/
+      ClockGraph.hs       -- Graph construction
+      Propagation.hs      -- Frequency propagation algorithm
+      Violation.hs        -- Violation detection
+      FrequencyCalc.hs    -- Component-specific frequency calculations
+```
+
+**Module Naming:**
+- `VDHL.Analysis.ClockGraph` exports graph types and `buildClockGraph`
+- `VDHL.Analysis.Propagation` exports `propagateFrequencies`
+- `VDHL.Analysis.Violation` exports `detectFrequencyViolations`
+- `VDHL.Analysis.FrequencyCalc` exports `calculateOutputFrequency`
+
+**Dependencies:**
+- `containers` for Map and graph operations
+- `spellcraft-adc-001` for AST types
+- `spellcraft-adc-002` for component library
+
+**Algorithm Notes:**
+- Use topological sort for propagation order (detect cycles)
+- Memoize calculated frequencies to avoid recomputation
+- Build graph in single pass over component instantiations
+
+# Examples
+
+## Example 1: Building Clock Graph
+
+```haskell
+-- Given VDHL with PLL and encoder
+design <- parseVDHLFile "top.vhd"
+library <- pure testComponentLibrary
+
+case buildClockGraph design library of
+  Left err -> print err
+  Right graph -> do
+    print (length (cgNodes graph))  -- Number of signals
+    print (length (cgSources graph))  -- Number of clock sources
+```
+
+## Example 2: PLL Frequency Calculation
+
+```haskell
+let pllSpec = lookupComponent "PLL_1" library
+let generics = [("MULT_FACTOR", RealValue 4.16)]
+let inputFreq = 50.0  -- 50 MHz
+
+case calculateOutputFrequency pllSpec generics inputFreq of
+  Right outputFreq -> do
+    print outputFreq  -- 208.0 MHz
+  Left err -> print err
+```
+
+## Example 3: Detecting PRD Violation
+
+```haskell
+-- Design: pixel_clk (50 MHz) → PLL (×4.16) → high_clk (208 MHz) → encoder
+design <- parseVDHLFile "violation_example.vhd"
+
+graph <- buildClockGraph design testComponentLibrary
+graph' <- propagateFrequencies graph testComponentLibrary
+let violations = detectFrequencyViolations graph' testComponentLibrary
+
+-- violations =
+--   [ FrequencyViolation
+--       { violationComponent = "YPbPr_Encoder_A"
+--       , violationPort = "pixel_clk"
+--       , violationActual = 208.0
+--       , violationMax = 165.0
+--       , violationLocation = SourceLocation "top.vhd" 23 5
+--       }
+--   ]
+
+forM_ violations $ \v -> case v of
+  FrequencyViolation comp port actual maxFreq loc ->
+    putStrLn $ printf "%s:%d: Frequency violation: %s.%s receives %.1f MHz but max is %.1f MHz"
+      (locFile loc) (locLine loc) comp port actual maxFreq
+```
+
+## Example 4: Tracing Clock Path
+
+```haskell
+graph <- buildClockGraph design library
+
+case traceClockPath graph "pixel_clk" "high_clk" of
+  Just path -> do
+    forM_ path $ \step ->
+      putStrLn $ printf "  %s @ %s MHz (%s)"
+        (psSignal step)
+        (maybe "unknown" show (psFrequency step))
+        (fromMaybe "source" (psComponent step))
+    -- Output:
+    --   pixel_clk @ 50.0 MHz (source)
+    --   high_clk @ 208.0 MHz (PLL_1)
+  Nothing -> putStrLn "No path found"
+```
+
+# Tests
+
+## Unit Tests
+
+1. **Graph Construction**
+   - Build graph from simple design (2 components)
+   - Identify clock sources correctly
+   - Connect signals through port maps
+
+2. **Frequency Calculation**
+   - PLL multiplication: 50 MHz × 4.16 = 208 MHz
+   - Clock divider: 100 MHz ÷ 2 = 50 MHz
+   - Pass-through: input freq = output freq
+
+3. **Propagation Algorithm**
+   - Linear chain: source → comp1 → comp2 → sink
+   - Fan-out: source → comp1 → [comp2, comp3]
+   - Detect circular dependencies
+
+4. **Violation Detection**
+   - Detect frequency exceeding max at input port
+   - No violation when frequency within limits
+   - Multiple violations in same design
+
+## Integration Tests
+
+1. **PRD Example**
+   - Parse PRD violation scenario VDHL
+   - Build clock graph
+   - Propagate frequencies
+   - Detect 208 MHz > 165 MHz violation
+   - Generate correct error message with location
+
+2. **Valid Design**
+   - Parse design with no violations
+   - Verify empty violation list
+
+3. **Complex Design**
+   - Multiple PLLs with different multiplication factors
+   - Multiple sinks with different max frequencies
+   - Verify all violations detected
+
+## Property Tests
+
+1. **Graph Invariants**
+   - Every edge references existing nodes
+   - Every source is a node
+   - No isolated subgraphs (all connect to architecture ports)
+
+2. **Propagation Invariants**
+   - After propagation, all reachable nodes have frequencies
+   - Frequencies are positive
+   - Source frequencies unchanged
+
+## Performance Tests
+
+1. **Scaling**
+   - 10 components: < 50ms
+   - 100 components: < 500ms
+   - Memory usage O(n) in component count

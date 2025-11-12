@@ -1,0 +1,192 @@
+---
+title: "ADC-022: Indexed Signal Assignment Support"
+id: spellcraft-adc-022
+status: draft
+created: 2025-11-10
+updated: 2025-11-10
+---
+
+# Purpose
+
+Enable the VHDL parser to handle indexed signal assignments on the left-hand side of assignments. VHDL allows array indexing in assignment targets, which is essential for working with arrays and vectors.
+
+## Background
+
+Current implementation assumes assignment targets are simple signal names:
+```haskell
+data Statement = SignalAssignment
+  { stmtTarget :: SignalName  -- SignalName = Text
+  , stmtExpr :: Expression
+  }
+```
+
+However, real VHDL code uses indexed assignments:
+```vhdl
+process(clk)
+begin
+  if rising_edge(clk) then
+    s_result_array(0) <= a;                    -- Indexed assignment
+    s_result_array(i) <= s_result_array(i-1);  -- Variable index
+    s_vector(7 downto 0) <= data_in;           -- Slice assignment
+  end if;
+end process;
+```
+
+This blocker affects **at least 5 out of 10 remaining files (50% of remaining)**.
+
+# Interface
+
+## AST Changes
+
+Change `SignalAssignment` and related constructs to accept expressions as targets:
+
+```haskell
+-- ADC-IMPLEMENTS: spellcraft-adc-022
+data Statement
+  = SignalAssignment
+      { stmtTarget :: Expression  -- Changed from SignalName to Expression
+      , stmtExpr :: Expression
+      , stmtLocation :: SourceLocation
+      }
+  | VariableAssignment
+      { stmtVarTarget :: Expression  -- Changed from Identifier to Expression
+      , stmtVarExpr :: Expression
+      , stmtLocation :: SourceLocation
+      }
+  -- ... other statements unchanged
+```
+
+Similarly for concurrent assignments:
+```haskell
+-- ADC-IMPLEMENTS: spellcraft-adc-022
+data ArchStatement
+  = ConcurrentAssignment
+      { concTarget :: Expression  -- Changed from SignalName to Expression
+      , concExpr :: Expression
+      , concLocation :: SourceLocation
+      }
+  -- ... other arch statements unchanged
+```
+
+## Parser Changes
+
+Update assignment parsers to accept any left-hand-side expression:
+
+```haskell
+-- ADC-IMPLEMENTS: spellcraft-adc-022
+parseSignalAssignment :: Parser Statement
+parseSignalAssignment = do
+  pos <- getSourcePos
+  target <- parseExpression  -- Changed from 'identifier'
+  void $ symbol "<="
+  expr <- parseExpression
+  void semi
+  pure SignalAssignment
+    { stmtTarget = target  -- Now an Expression
+    , stmtExpr = expr
+    , stmtLocation = sourcePosToLocation pos
+    }
+```
+
+# Implementation
+
+## Files to Modify
+
+1. **src/VHDL/AST.hs**: Change target types to Expression
+2. **src/VHDL/Parser.hs**: Update parsers to use parseExpression for targets
+3. **src/VHDL/Analysis/SignalUsage.hs**: Extract signal names from target expressions
+4. **src/VHDL/Analysis/Process.hs**: Handle expression targets
+5. **src/VHDL/CLI/Report.hs**: May need updates for display
+
+## Compatibility Helpers
+
+For code that expects simple signal names:
+
+```haskell
+-- ADC-IMPLEMENTS: spellcraft-adc-022
+-- Extract primary signal name from assignment target (best effort)
+targetToSignalName :: Expression -> Maybe SignalName
+targetToSignalName (IdentifierExpr name) = Just name
+targetToSignalName (IndexedName base _) = targetToSignalName base  -- Recurse to get base signal
+targetToSignalName (SliceExpr base _ _ _) = targetToSignalName base
+targetToSignalName _ = Nothing  -- Complex expressions
+```
+
+# Parity
+
+## File Locations
+
+- Contract: `/Users/tad/t4mber/spellcraft/contracts/adc-022-indexed-signal-assignments.qmd`
+- AST: `/Users/tad/t4mber/spellcraft/src/VHDL/AST.hs`
+- Parser: `/Users/tad/t4mber/spellcraft/src/VHDL/Parser.hs`
+- Analysis: `/Users/tad/t4mber/spellcraft/src/VHDL/Analysis/*.hs`
+
+# Requirements
+
+## Functional
+
+1. Parse simple signal assignments: `signal <= value` (backward compatibility)
+2. Parse indexed assignments: `array(0) <= value`
+3. Parse variable-indexed assignments: `array(i) <= value`
+4. Parse slice assignments: `vector(7 downto 0) <= data`
+5. Parse nested indexed assignments: `array_2d(i)(j) <= value`
+6. Maintain correct signal usage tracking (extract base signal name)
+
+## Non-Functional
+
+1. All existing tests must pass
+2. Parse rate improvement from 56% to 90%+ expected
+3. No performance regression
+
+# Test Plan
+
+## Unit Tests
+
+Test fixture `test/fixtures/indexed_assignment.vhd`:
+```vhdl
+library ieee;
+use ieee.std_logic_1164.all;
+
+entity indexed_assignment_test is
+  port (
+    clk : in std_logic;
+    data_in : in std_logic_vector(7 downto 0);
+    index : in integer range 0 to 3
+  );
+end indexed_assignment_test;
+
+architecture rtl of indexed_assignment_test is
+  type t_array is array (0 to 3) of std_logic_vector(7 downto 0);
+  signal s_array : t_array;
+begin
+  process(clk)
+  begin
+    if rising_edge(clk) then
+      s_array(0) <= data_in;           -- Constant index
+      s_array(index) <= data_in;       -- Variable index
+      s_array(0)(7 downto 4) <= "0000"; -- Slice of indexed signal
+    end if;
+  end process;
+end architecture;
+```
+
+## Integration Tests
+
+Run on LZX corpus:
+- Target: 90%+ parse rate (21/23 files)
+- All currently passing files must still pass
+- delay.vhd should now parse (has indexed assignments)
+
+# Success Criteria
+
+1. ✅ `indexed_assignment.vhd` parses successfully
+2. ✅ `contrib/lzx/lumarian/delay.vhd` parses successfully
+3. ✅ Parse rate improves to 90%+ (21/23 files)
+4. ✅ All 36+ existing tests pass
+5. ✅ Signal usage tracking extracts base signal names correctly
+
+# References
+
+- Related: ADC-021 (Port Map Expressions) - similar pattern
+- VHDL LRM: Section 8.4 (Assignment Statements)
+- LZX Corpus: ~5/10 remaining files blocked by this issue

@@ -1,0 +1,255 @@
+---
+title: "Clock Source Detection and Signal Flow"
+id: "spellcraft-adc-007"
+version: "1.0.0"
+status: "draft"
+dependencies: ["spellcraft-adc-001", "spellcraft-adc-002", "spellcraft-adc-003"]
+---
+
+# Purpose
+
+Implement clock source detection and proper signal flow through components to enable frequency propagation analysis. Success is achieved when the analyzer can identify initial clock sources (entity input ports or explicit clock generators), track signal transformations through component port mappings, and propagate frequencies from sources to sinks through the complete signal graph. This resolves the three critical gaps identified in ClockGraph.hs:92 (empty sources), ClockGraph.hs:126 (broken edge creation), and enables the violation detection pipeline described in @contracts/spellcraft-adc-003.qmd.
+
+# Scope
+
+**In Scope:**
+- Detect clock sources from entity input ports with heuristic naming (contains "clk", "clock", "osc")
+- Extract initial frequencies from VHDL comments (e.g., `-- 25 MHz system clock`)
+- Build correct signal flow edges connecting component input ports to output ports
+- Map port connections through generic/port maps to create ceFrom→ceTo edges
+- Assign initial frequencies to detected clock source nodes
+- Provide fallback frequency assignment for sources without detected frequencies
+
+**Out of Scope:**
+- GUI or configuration file for manual clock source specification
+- Automatic frequency detection from external constraint files (SDC/XDC)
+- Detection of internal clock generators (DCM, MMCM beyond PLL)
+- Clock gating or clock mux handling
+- Multi-clock domain analysis
+
+# Interface
+
+```haskell
+-- Clock source detection
+detectClockSources
+  :: VHDLDesign
+  -> ComponentLibrary
+  -> [ClockSource]
+
+-- Extract frequency from comment heuristics
+parseFrequencyFromComment
+  :: Text  -- Comment text near signal
+  -> Maybe Double  -- Frequency in MHz
+
+-- Build proper signal flow edges
+buildSignalFlowEdges
+  :: ComponentInst
+  -> ComponentSpec
+  -> [ClockEdge]
+
+-- Assign initial frequencies to graph
+assignInitialFrequencies
+  :: ClockGraph
+  -> [ClockSource]
+  -> ClockGraph
+
+-- Enhanced graph building with sources
+buildClockGraphWithSources
+  :: VHDLDesign
+  :: ComponentLibrary
+  -> Either AnalysisError ClockGraph
+```
+
+# Constraints
+
+- **Heuristic Accuracy**: Clock source detection should identify sources in 90%+ of typical VHDL designs
+- **Frequency Parsing**: Support common formats: "25 MHz", "50MHz", "100 MHZ", "25.0 MHz"
+- **Signal Flow Correctness**: Every edge must correctly connect input signal to output signal through component
+- **Performance**: Clock source detection adds < 50ms to graph build time
+- **Backward Compatibility**: Must not break existing ClockGraph API from @contracts/spellcraft-adc-003.qmd
+
+# Parity
+
+**File Structure:**
+```
+src/
+  VHDL/
+    Analysis/
+      ClockGraph.hs       -- Update buildClockGraph (line 92: populate sources)
+                          -- Update mkEdge (line 123-129: fix ceFrom/ceTo)
+      ClockSource.hs      -- NEW: Clock source detection logic
+      FrequencyParser.hs  -- NEW: Parse frequencies from comments
+```
+
+**Modifications Required:**
+
+1. **ClockGraph.hs Line 92:**
+```haskell
+-- BEFORE:
+let sources = []  -- Will be enhanced in propagation phase
+
+-- AFTER:
+sources <- detectClockSources design lib
+let nodesWithFreqs = assignInitialFrequencies nodes sources
+```
+
+2. **ClockGraph.hs Lines 123-129:**
+```haskell
+-- BEFORE:
+mkEdge :: ComponentInst -> (Identifier, SignalName) -> ClockEdge
+mkEdge comp (port, signal) = ClockEdge
+  { ceFrom = signal
+  , ceTo = signal  -- Will be refined in propagation
+  , ceComponent = compInstName comp
+  , ceInputPort = port
+  }
+
+-- AFTER:
+mkEdge :: ComponentInst -> ComponentSpec -> (Identifier, SignalName) -> ClockEdge
+mkEdge comp spec (inputPort, inputSignal) = ClockEdge
+  { ceFrom = inputSignal
+  , ceTo = findOutputSignal comp spec inputPort
+  , ceComponent = compInstName comp
+  , ceInputPort = inputPort
+  }
+
+findOutputSignal :: ComponentInst -> ComponentSpec -> Identifier -> SignalName
+findOutputSignal comp spec inputPort =
+  -- Look up corresponding output port in component spec
+  -- Find signal mapped to that output port in comp's port map
+  -- Return that signal name
+```
+
+# Examples
+
+## Example 1: Detect Clock Source from Entity Port
+
+```haskell
+-- Given VHDL:
+-- entity top is
+--   port (
+--     sys_clk : in std_logic;  -- 25 MHz system clock
+--     data : in std_logic_vector(7 downto 0)
+--   );
+-- end entity top;
+
+sources <- detectClockSources design lib
+
+-- sources =
+--   [ ClockSource
+--       { csSignal = "sys_clk"
+--       , csFrequency = 25.0  -- parsed from comment
+--       , csComponent = "<entity>"
+--       , csPort = "sys_clk"
+--       , csLocation = SourceLocation "top.vhd" 3 5
+--       }
+--   ]
+```
+
+## Example 2: Build Signal Flow Through PLL
+
+```haskell
+-- Given component instantiation:
+-- pll1_inst : component PLL_1
+--   generic map ( MULT_FACTOR => 4.0 )
+--   port map (
+--     clk_in => sys_clk,
+--     clk_out => clk_stage1
+--   );
+
+edges <- buildSignalFlowEdges pll1_inst pll1Spec
+
+-- edges =
+--   [ ClockEdge
+--       { ceFrom = "sys_clk"
+--       , ceTo = "clk_stage1"
+--       , ceComponent = "pll1_inst"
+--       , ceInputPort = "clk_in"
+--       }
+--   ]
+```
+
+## Example 3: Complete Pipeline
+
+```haskell
+-- Build graph with sources
+design <- parseVHDLFile "examples/02_multiple_pll_cascading.vhd"
+graph <- buildClockGraphWithSources design testComponentLibrary
+
+-- Verify sources detected
+length (cgSources graph) == 1
+csFrequency (head (cgSources graph)) == 25.0
+
+-- Verify signal flow
+let edge1 = find (\e -> ceComponent e == "pll1_inst") (cgEdges graph)
+ceFrom edge1 == "sys_clk"
+ceTo edge1 == "clk_stage1"
+
+-- Propagate and detect violations
+graph' <- propagateFrequencies graph testComponentLibrary
+let violations = detectFrequencyViolations graph' testComponentLibrary
+
+-- Should detect: clk_stage2 (300 MHz) > pixel_clk max (165 MHz)
+length violations == 1
+```
+
+# Tests
+
+## Unit Tests
+
+1. **Clock Source Detection**
+   - Detect port named "clk" as clock source
+   - Detect port named "sys_clock" as clock source
+   - Skip port named "data" (not clock-like)
+   - Parse "25 MHz" from comment
+   - Parse "50MHz" from comment (no space)
+   - Return Nothing for non-frequency comments
+
+2. **Signal Flow Edge Creation**
+   - PLL: clk_in=sys_clk → clk_out=stage1 creates edge sys_clk→stage1
+   - Encoder: pixel_clk=stage2 → video_out=output creates edge stage2→output
+   - Multi-port component creates multiple edges
+
+3. **Initial Frequency Assignment**
+   - Clock source at 25 MHz → node frequency set to 25.0
+   - Non-source node → frequency remains Nothing
+   - Multiple sources → all assigned correctly
+
+## Integration Tests
+
+1. **Example 02: Multiple PLL Cascading**
+   - Parse examples/02_multiple_pll_cascading.vhd
+   - Detect sys_clk as 25 MHz source
+   - Build edges: sys_clk→clk_stage1→clk_stage2
+   - Propagate: clk_stage1=100 MHz, clk_stage2=300 MHz
+   - Detect violation: encoder pixel_clk receives 300 MHz > 165 MHz
+
+2. **Example 01: Basic Violation**
+   - Detect pixel_clk as 50 MHz source
+   - Propagate through PLL: 50×4.16=208 MHz
+   - Detect violation at encoder
+
+3. **Example 03: Valid Design**
+   - Build graph and propagate
+   - Verify no violations (all frequencies within limits)
+
+## Property Tests
+
+1. **Edge Invariants**
+   - ceFrom ≠ ceTo (no self-loops)
+   - Both ceFrom and ceTo exist in cgNodes
+   - ceComponent exists in architecture
+
+2. **Source Invariants**
+   - csSignal exists in cgNodes
+   - csFrequency > 0
+   - After assignInitialFrequencies, source nodes have frequency set
+
+## Acceptance Criteria
+
+✅ All 6 example VHDL files in `examples/` directory parse and build clock graphs
+✅ examples/01_pll_violation.vhd detects 208 MHz > 165 MHz violation
+✅ examples/02_multiple_pll_cascading.vhd detects 300 MHz > 165 MHz violation
+✅ examples/03_valid_design.vhd shows no violations
+✅ examples/04_missing_constraint.vhd shows appropriate behavior
+✅ Verbose mode shows clock source detection and frequency propagation steps

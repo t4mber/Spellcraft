@@ -3,10 +3,10 @@ module VHDL.Analysis.Violation
   ( detectFrequencyViolations
   ) where
 
-import Data.Maybe (maybeToList, mapMaybe)
+import Data.Maybe (maybeToList, mapMaybe, catMaybes)
 import Data.Text (Text)
 import qualified Data.Map.Strict as Map
-import VHDL.AST (Identifier, ComponentInst(..), SignalName, PortDirection(..))
+import VHDL.AST (Identifier, ComponentInst(..), SignalName, PortDirection(..), Expression(..))
 import VHDL.Analysis.ClockGraph (ClockGraph(..), ClockNode(..), ClockEdge(..))
 import VHDL.Constraint.Library (ComponentLibrary, lookupComponent)
 import VHDL.Constraint.Types
@@ -34,8 +34,11 @@ detectFrequencyViolations graph lib =
       in case lookupComponent compType lib of
            Nothing -> []
            Just spec ->
+             -- ADC-IMPLEMENTS: spellcraft-adc-021
              -- Check all input ports with clock constraints
-             let inputPorts = [(port, sig) | (port, sig) <- compPortMap comp
+             -- Port map now contains expressions, extract signal identifiers
+             let inputPorts = [(port, sig) | (port, expr) <- compPortMap comp
+                                            , Just sig <- [exprToSignalName expr]
                                             , hasClockConstraint port spec]
              in concatMap (checkPort compName compLoc spec) inputPorts
 
@@ -43,6 +46,11 @@ detectFrequencyViolations graph lib =
       case Map.lookup signalName (cgNodes graph) of
         Nothing -> []
         Just node -> checkNodeAgainstSpec node compName portName spec compLoc
+
+    -- ADC-IMPLEMENTS: spellcraft-adc-021
+    -- Extract signal name from expression (for violation detection)
+    exprToSignalName (IdentifierExpr name) = Just name
+    exprToSignalName _ = Nothing  -- Complex expressions don't represent single signals
 
     -- Check if a port has frequency constraints
     hasClockConstraint portName spec =

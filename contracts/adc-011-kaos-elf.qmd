@@ -1,0 +1,245 @@
+---
+title: "Kaos Elf VHDL Violation Injector"
+id: spellcraft-adc-011
+version: 1.0.0
+status: active
+created: 2025-11-09
+---
+
+# Kaos Elf VHDL Violation Injector
+
+## Purpose
+
+Create a systematic test harness that injects known VHDL hardware violations into working designs to validate the analyzer's detection capabilities. This "kaos elf" approach ensures comprehensive coverage of both catastrophic and subtle hardware errors.
+
+## Motivation
+
+Hardware design errors can range from obvious syntax violations to subtle timing issues that only manifest under specific conditions. By systematically injecting known violations, we can:
+
+1. **Validate Detection**: Ensure the analyzer catches all implemented violation checks
+2. **Identify Gaps**: Discover which violations are not yet detected
+3. **Regression Testing**: Prevent detection regressions as the analyzer evolves
+4. **Documentation**: Create a living catalog of hardware violations
+
+## Violation Categories
+
+### Category 1: Clock Domain Violations (Catastrophic)
+- **Multiple Clock Drivers**: Signal driven by multiple clock domains without CDC
+- **Unregistered CDC**: Direct connections between clock domains
+- **Missing Synchronizers**: Async signals crossing domains without sync FFs
+- **Reset Domain Crossing**: Reset signals crossing clock domains improperly
+- **Clock Gating Without Enable**: Combinatorial clock gating
+- **Feedback Without Registers**: Combinatorial loops through clock domains
+
+### Category 2: Combinatorial Hazards (Subtle)
+- **Glitch-Prone Logic**: Multiple async inputs to combinatorial functions
+- **Long Combinatorial Paths**: Deep logic without pipeline stages
+- **Feedback Loops**: Combinatorial feedback without registered breaks
+- **Priority Encoder Glitches**: Unprotected priority selection
+- **Multiplexer Glitches**: Large muxes without registered outputs
+
+### Category 3: Signal Integrity Issues (Subtle)
+- **Undriven Signals**: Signals declared but never assigned
+- **Multiple Drivers**: Combinatorial contention on single signal
+- **Incomplete Sensitivity Lists**: Process missing signals in sensitivity
+- **Latch Inference**: Incomplete case/if statements
+- **Don't Care Propagation**: X or U values not properly handled
+
+### Category 4: Timing Violations (Catastrophic)
+- **Setup/Hold Violations**: Logic paths exceeding clock period
+- **Metastability Risks**: Async inputs not synchronized
+- **Clock Skew Issues**: Large fanout without buffering
+- **Excessive Fan-out**: Single signal driving too many loads
+- **Minimum Pulse Width**: Signals not meeting timing constraints
+
+### Category 5: Reset Violations (Catastrophic)
+- **Async Reset Recovery**: Reset released near clock edge
+- **Reset Synchronization**: Async resets not synchronized to clock
+- **Incomplete Reset**: Registers missing reset in architecture
+- **Reset Polarity Mismatch**: Mixed active-high/low resets
+- **Power-on State**: Uninitialized state machines
+
+### Category 6: Resource Violations (Implementation)
+- **Excessive LUT Depth**: Logic requiring too many LUT levels
+- **RAM Inference Failure**: Array patterns not inferring BRAM
+- **DSP Inference Failure**: Multiply/accumulate not using DSPs
+- **Shift Register Inference**: Large shift chains not optimized
+- **Clock Buffer Overload**: Too many clock enables
+
+### Category 7: Functional Errors (Subtle)
+- **Off-by-One Errors**: Array indexing mistakes
+- **Overflow/Underflow**: Arithmetic without bounds checking
+- **Bit Width Mismatches**: Implicit truncation/extension
+- **Signed/Unsigned Mix**: Type mismatches in arithmetic
+- **Constant Propagation Errors**: Logic optimized away incorrectly
+
+## Interface
+
+### Input
+```yaml
+source_design: "contrib/lzx/lumarian"
+output_directory: "contrib/lzx-kaos"
+violation_manifest: "kaos-violations.json"
+```
+
+### Output Structure
+```
+contrib/lzx-kaos/
+├── kaos-violations.json          # Master violation catalog
+├── enhanced.vhd                   # Enhanced with violation markers
+├── contrast-cat1-violation3.vhd   # Category 1, violation 3
+├── gamma-cat2-violation1.vhd      # Category 2, violation 1
+├── ...                            # One file per violation type
+└── README.md                      # Generation report
+```
+
+### Violation Manifest Schema
+```json
+{
+  "source": "contrib/lzx/lumarian/enhanced.vhd",
+  "generated_at": "2025-11-09T23:00:00Z",
+  "violations": [
+    {
+      "id": "cat1-violation3",
+      "category": "Clock Domain Violations",
+      "type": "Unregistered CDC",
+      "severity": "catastrophic",
+      "file": "enhanced-cat1-violation3.vhd",
+      "line": 45,
+      "description": "Direct signal assignment between 'clk_pixel' and 'clk_video' domains",
+      "injection": {
+        "original": "signal s_sync : std_logic;",
+        "corrupted": "signal s_sync : std_logic; -- CDC violation injected",
+        "method": "removed synchronizer flip-flops"
+      },
+      "expected_detection": {
+        "should_detect": true,
+        "detection_method": "clock_domain_analyzer",
+        "confidence": "high"
+      }
+    }
+  ]
+}
+```
+
+## Implementation
+
+### Parity: Generator Script
+
+**Location**: `scripts/kaos-elf.py`
+
+The generator must:
+1. Parse source VHDL files to understand structure
+2. Identify injection points for each violation category
+3. Create variant files with single violations injected
+4. Generate comprehensive manifest with expected detections
+5. Add inline comments marking violations for manual review
+
+### Generation Strategy
+
+**Per-File Approach**: Each violation gets its own file variant
+- Easier to isolate test failures
+- Clear one-to-one mapping violation → file
+- Parallel testing capability
+
+**Inline Documentation**: Every injection includes:
+```vhdl
+-- KAOS-ELF: cat1-violation3
+-- VIOLATION: Unregistered CDC crossing
+-- SEVERITY: catastrophic
+-- ORIGINAL: [3 lines of original code]
+-- INJECTED: Direct assignment bypassing synchronizer
+```
+
+### Generator Instructions (For LLM Implementation)
+
+When implementing the kaos elf generator:
+
+1. **Parse Phase**:
+   - Identify all signal declarations
+   - Map all clock domains
+   - Find all process blocks
+   - Locate synchronizer patterns
+   - Identify arithmetic operations
+
+2. **Injection Phase** (per violation):
+   - Copy source file to new variant
+   - Apply single violation transformation
+   - Add violation marker comments
+   - Preserve file structure and formatting
+   - Update entity/architecture names
+
+3. **Documentation Phase**:
+   - Generate JSON manifest entry
+   - Include original vs corrupted snippets
+   - Specify expected detection method
+   - Note severity and category
+   - Add testing metadata
+
+4. **Validation Phase**:
+   - Verify corrupted files parse as valid VHDL
+   - Check violation markers are present
+   - Ensure manifest is well-formed JSON
+   - Generate summary statistics
+
+## Validation
+
+### Success Criteria
+
+1. **Coverage**: At least 3 violations per category (7 categories = 21+ variants)
+2. **Parseable**: All generated files must parse successfully
+3. **Detectable**: Manifest accurately predicts detection capability
+4. **Documented**: Every violation has clear description and markers
+5. **Automatable**: Generation is fully scripted and repeatable
+
+### Test Execution
+
+```bash
+# Generate kaos variants
+python scripts/kaos-elf.py \
+  --source contrib/lzx/lumarian/enhanced.vhd \
+  --output contrib/lzx-kaos \
+  --manifest kaos-violations.json
+
+# Run analyzer on all variants
+stack exec spellcraft -- contrib/lzx-kaos/*.vhd \
+  --report kaos-detection-report.json
+
+# Compare detections vs manifest
+python scripts/kaos-compare.py \
+  --manifest contrib/lzx-kaos/kaos-violations.json \
+  --results kaos-detection-report.json \
+  --output kaos-test-results.md
+```
+
+## Preconditions
+
+- ✅ Parser achieves 100% success on clean Lumarian corpus
+- ✅ Basic Clash violation detection implemented (adc-008)
+- ✅ Clock domain tracking functional (adc-003, adc-007)
+- ⏳ Violation detection rules defined (to be implemented)
+
+## Postconditions
+
+- 🎯 Comprehensive violation test suite exists
+- 🎯 Detection gaps are documented
+- 🎯 Regression tests prevent detection loss
+- 🎯 Clear roadmap for new detection features
+
+## Notes
+
+This contract intentionally uses Python for generation instead of Haskell because:
+1. **Simpler text manipulation**: regex and string operations
+2. **Rapid prototyping**: easier to iterate on injection strategies
+3. **JSON integration**: native dict/list mapping to manifest
+4. **Accessibility**: easier for contributors without Haskell experience
+
+The generator can use Claude Opus 4 for intelligent injection point selection and violation crafting, making the violations realistic and pedagogically valuable.
+
+## Related Contracts
+
+- **adc-003**: Clock Propagation (detection target)
+- **adc-004**: Combinatorial Analysis (detection target)
+- **adc-007**: Clock Sources (detection target)
+- **adc-008**: Clash Integration (detection framework)
+- **adc-009**: Parser Enhancement (foundation)

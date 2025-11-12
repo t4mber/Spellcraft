@@ -35,8 +35,9 @@ import VHDL.Analysis.ClockGraph (buildClockGraph, ClockGraph(..), cgNodes, cgEdg
 import VHDL.Analysis.Propagation (propagateFrequencies)
 import VHDL.Analysis.Violation (detectFrequencyViolations)
 import VHDL.Analysis.ClashFile (analyzeClashFile, ClashAnalysisResult(..), ClashViolation(..), clashViolationToConstraint)
-import VHDL.AST (VHDLDesign)
-import VHDL.SourceLocation (mkSourceLocation)
+import VHDL.Analysis.SignalUsage (analyzeSignalUsage, SignalViolation(..), violationSignal, violationLocation, violationType)
+import VHDL.AST (VHDLDesign, designArchitectures)
+import VHDL.SourceLocation (mkSourceLocation, SourceLocation(..))
 import System.FilePath (takeExtension)
 import qualified Data.Map.Strict as Map
 
@@ -170,9 +171,14 @@ analyzeDesigns designs lib = concatMap analyzeDesign designs
   where
     analyzeDesign design =
       trace ("\n=== Starting Design Analysis ===") $
+      -- Signal usage analysis (ADC-012)
+      let signalViolations = concatMap analyzeSignalUsage (designArchitectures design)
+          signalConstraints = map signalViolationToConstraint signalViolations
+      in trace ("\n=== Signal Usage Analysis ===" ++
+               "\nSignal violations: " ++ show (length signalViolations)) $
       case buildClockGraph design lib of
         Left err ->
-          trace ("Graph building ERROR: " ++ show err) []
+          trace ("Graph building ERROR: " ++ show err) signalConstraints
         Right clockGraph ->
           let sourceInfo = unlines [show s | s <- cgSources clockGraph]
               edgeInfo = unlines [show e | e <- cgEdges clockGraph]
@@ -183,10 +189,21 @@ analyzeDesigns designs lib = concatMap analyzeDesign designs
                     "\nNodes before propagation:\n" ++ nodesBefore) $
           case propagateFrequencies clockGraph lib of
             Left err ->
-              trace ("Propagation error: " ++ show err) []
+              trace ("Propagation error: " ++ show err) signalConstraints
             Right propagatedGraph ->
               let nodesAfter = unlines [show (cnSignal n, cnFrequency n) | n <- Map.elems (cgNodes propagatedGraph)]
-                  violations = detectFrequencyViolations propagatedGraph lib
+                  freqViolations = detectFrequencyViolations propagatedGraph lib
+                  allViolations = signalConstraints ++ freqViolations
               in trace ("\n=== After Propagation ===" ++
                        "\nNodes:\n" ++ nodesAfter ++
-                       "\nViolations: " ++ show violations) violations
+                       "\nViolations: " ++ show allViolations) allViolations
+
+-- | Convert signal usage violation to constraint violation
+-- Contract: spellcraft-adc-012 Section: Signal Usage Tracker
+signalViolationToConstraint :: SignalViolation -> ConstraintViolation
+signalViolationToConstraint violation =
+  SignalUsageViolation
+    { violationSignalName = violationSignal violation
+    , violationDescription = violationType violation
+    , violationLocation = VHDL.Analysis.SignalUsage.violationLocation violation
+    }
