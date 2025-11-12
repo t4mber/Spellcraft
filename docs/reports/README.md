@@ -1,71 +1,63 @@
 # Spellcraft Development Reports
 
-This directory contains technical reports and analysis documents generated during development.
+Technical reports and evaluation documents for the Spellcraft VHDL analyzer.
 
-## ADC Loop Reports
+## Release Reports (0.4.0)
 
-### ADC_ITERATION_1_REPORT.md
-Detailed report from ADC Loop Iteration 1 (2025-11-12)
-- Component output tracking implementation
-- Lumarian corpus analysis
-- Before/after metrics
+### 2025-11-12-comprehensive-evaluation.md
+**[START HERE]** Complete system evaluation for 0.4.0 release
+- All test corpora results (27 production + 6 fixtures)
+- Performance benchmarks (0.2s per file, 5.6s for 27 files)
+- KAOS ELF violation detection validation (75% accuracy)
+- Feature validation and quality metrics
+- **Verdict**: ✅ APPROVED FOR 0.4.0 RELEASE
 
-### ADC_LOOP_COMPLETE.md
-Final summary of ADC Loop Iteration 1
-- Overall results and achievements
-- Phase-by-phase breakdown
-- Release readiness assessment
-
-## Corpus Analysis Reports
-
-### CORPUS_METRICS_REPORT.md
-Comprehensive metrics across all three test corpora
+### 2025-11-12-corpus-metrics.md
+Test corpus results summary
 - Lumarian: 76% clean pass (13 files)
 - Mirrorbound: 40% clean pass (10 files)
-- Kaos: Violation detection validation (4 files)
-- Overall: 96% parse success, 55% clean pass (27 files)
+- KAOS ELF: 75% violation detection (4 files)
+- Overall: 96% parse success, 55% clean pass
 
-### PARSING_COVERAGE_REPORT.md
-Detailed parsing coverage analysis for 0.4.0 release
-- File-by-file results
-- Root cause analysis of violations
-- Implementation roadmap
+### 2025-11-12-signal-usage-tracker.md
+Signal usage analysis feature (ADC-012)
+- Component output port tracking heuristic
+- Before/after metrics: 38% → 76% clean pass on Lumarian
+- False positive reduction: 62% → 11%
 
-## Feature-Specific Reports
+### 2025-11-12-kaos-elf-evaluation.md
+KAOS ELF violation injection framework (ADC-011)
+- Test corpus generation and validation
+- Violation detection accuracy by level
+- Level 1-2 detection working, Level 3-5 planned
 
-### SIGNAL_USAGE_TRACKER_REPORT.md
-Signal usage analysis feature evaluation (ADC-012)
-- Implementation details
-- Test results on Lumarian corpus
-- False positive analysis
-
-### KAOS_ELF_EVALUATION_REPORT.md
-Kaos Elf violation injection framework evaluation (ADC-011)
-- Test corpus generation
-- Violation detection accuracy
-- Level 1-5 chaos validation
+## Development Reports
 
 ### DIAGRAM_GENERATION_SUMMARY.md
 LZX diagram generation task summary
 - High-level patch diagrams (Lumarian, Mirrorbound)
-- Design philosophy: "A patch with LZX P Series modules"
 - Mermaid diagram standards
 
 ### LINT_REPORT.md
 Contract lint macro application report
-- Lumarian patch diagram formatting fixes
-- Mermaid directive corrections
-- List formatting standardization
+- Documentation formatting fixes
+
+## Quick Reference
+
+**Run all tests**:
+```bash
+python3 tests/corpus_test.py
+```
+
+**Single file test**:
+```bash
+stack exec spellcraft -- contrib/lzx/lumarian/filter.vhd
+```
+
+**Performance metrics**: See "Performance Metrics" in 2025-11-12-comprehensive-evaluation.md
 
 ## Reading Order
 
-For understanding the 0.4.0 release:
-1. **Start**: CORPUS_METRICS_REPORT.md (current state)
-2. **Context**: ADC_LOOP_COMPLETE.md (how we got here)
-3. **Details**: ADC_ITERATION_1_REPORT.md (implementation details)
-4. **Deep Dive**: PARSING_COVERAGE_REPORT.md (technical analysis)
-
-For specific features:
-- Signal usage: SIGNAL_USAGE_TRACKER_REPORT.md
-- Violation detection: KAOS_ELF_EVALUATION_REPORT.md
-- Documentation: DIAGRAM_GENERATION_SUMMARY.md + LINT_REPORT.md
+1. **For release understanding**: Start with 2025-11-12-comprehensive-evaluation.md
+2. **For test metrics**: See 2025-11-12-corpus-metrics.md
+3. **For specific features**: See feature-specific reports (signal-usage-tracker, kaos-elf-evaluation)
