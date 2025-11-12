@@ -218,7 +218,7 @@ spellcraft test/fixtures/simple_slice.vhd
 spellcraft test/fixtures/downto_slice.vhd
 # Expected: Parse success
 
-# Level 1 Kaos Brownie (uses slices)
+# Level 1 Kaos Elf (uses slices)
 spellcraft contrib/lzx-kaos-levels/enhance-level1-undriven.vhd
 # Expected: Parse success (after ADC-018 also implemented)
 ```
@@ -286,7 +286,7 @@ result <= resize(data(7 downto 0), 16);
 
 ### Blocks
 - LZX 90% parse rate - BLOCKED
-- Level 1 Kaos Brownie - BLOCKED (also needs ADC-018)
+- Level 1 Kaos Elf - BLOCKED (also needs ADC-018)
 - v0.4.0 Release - BLOCKED
 
 ### Blocked By

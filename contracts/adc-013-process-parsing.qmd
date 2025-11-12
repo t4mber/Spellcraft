@@ -209,7 +209,7 @@ Expected: `state` marked as read, `next_state` marked as assigned
 ### Week 1: Core Sequential Statements
 - Day 1-2: Implement `parseSignalAssignment` and `parseIfStatement`
 - Day 3-4: Update AST with `Expression` type
-- Day 5: Test on kaos brownie corpus
+- Day 5: Test on kaos elf corpus
 
 ### Week 2: Expression Parser
 - Day 1-2: Implement expression parser with precedence

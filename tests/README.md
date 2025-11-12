@@ -1,6 +1,6 @@
 # Spellcraft Test Suite
 
-## Test Fixtures
+## Test Infrastructure
 
 ### corpus_test.py
 
@@ -21,6 +21,24 @@ python3 tests/corpus_test.py
 - Clean pass rate (files with no violations)
 - Violation detection accuracy
 - Per-file status breakdown
+
+## Parser Unit Test Fixtures
+
+### fixtures/parser/
+Minimal VHDL test cases for parser development
+- **Purpose**: Test specific parser constructs in isolation
+- **Size**: 6 minimal files (10-20 lines each)
+- **Expected**: 100% parse success, no violations
+
+**Files**:
+- `test-combo.vhd` - Combinatorial logic sensitivity list
+- `test-if.vhd` - If statement with rising_edge()
+- `test-keyword.vhd` - VHDL keyword parsing
+- `test-process2.vhd` - Process variations
+- `test-sensitivity.vhd` - Sensitivity list parsing
+- `test-signal-ref.vhd` - Signal reference extraction
+
+See `fixtures/parser/README.md` for detailed documentation.
 
 ## Test Corpora
 

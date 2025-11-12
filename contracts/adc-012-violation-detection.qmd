@@ -11,13 +11,13 @@ priority: 1
 - **Title**: VHDL Violation Detection Framework
 - **Date Issued**: 2025-11-09
 - **Status**: Partial (Priority 1 implemented, 2-3 pending)
-- **Depends On**: ADC-011 (Kaos Brownie), Parser Implementation
+- **Depends On**: ADC-011 (Kaos Elf), Parser Implementation
 - **Iteration**: 2
 - **Last Updated**: 2025-11-10
 
 ## Purpose
 
-Implement static analysis violation detection based on priorities identified in KAOS_BROWNIE_EVALUATION_REPORT.md. The kaos brownie evaluation revealed 0% detection rate on expected violations (Levels 1-3). This contract addresses the three highest-priority detection gaps.
+Implement static analysis violation detection based on priorities identified in KAOS_ELF_EVALUATION_REPORT.md. The kaos elf evaluation revealed 0% detection rate on expected violations (Levels 1-3). This contract addresses the three highest-priority detection gaps.
 
 ## Motivation
 
@@ -26,7 +26,7 @@ Implement static analysis violation detection based on priorities identified in 
 - Detection: 0% success rate (0/3 expected violations)
 - Clock analysis: Basic infrastructure exists but no violations reported
 
-**Evaluation Results** (from KAOS_BROWNIE_EVALUATION_REPORT.md):
+**Evaluation Results** (from KAOS_ELF_EVALUATION_REPORT.md):
 - Level 1 (Obvious): Undriven signal `THIS_SIGNAL_IS_NEVER_USED` - ✅ DETECTED (as of 2025-11-10)
 - Level 2 (Moderate): Latch inference from incomplete assignment - NOT DETECTED ❌
 - Level 3 (Subtle): Silent overflow in counter - NOT DETECTED ❌
@@ -324,7 +324,7 @@ runAnalysis files = do
 
 ### Test Corpus
 
-**Primary Test**: Kaos brownie corpus
+**Primary Test**: Kaos elf corpus
 ```bash
 stack exec spellcraft -- contrib/lzx-kaos-levels/*.vhd
 ```
@@ -409,7 +409,7 @@ Expected: No false positive violations
 
 **Day 5**: Final validation
 - Test on level3-bitgrowth.vhd
-- Full kaos brownie regression
+- Full kaos elf regression
 - Generate updated evaluation report
 
 ## Dependencies
@@ -468,9 +468,9 @@ Expected: No false positive violations
 This contract is accepted when:
 
 1. ✅ All three modules implemented and integrated
-2. ✅ Kaos brownie evaluation shows 3/3 detections (100%)
+2. ✅ Kaos elf evaluation shows 3/3 detections (100%)
 3. ✅ Clean corpus shows < 5% false positives
-4. ✅ Updated KAOS_BROWNIE_EVALUATION_REPORT.md generated
+4. ✅ Updated KAOS_ELF_EVALUATION_REPORT.md generated
 5. ✅ All code committed with tests
 
 ---

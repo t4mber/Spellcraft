@@ -6,9 +6,9 @@
 
 ## Executive Summary
 
-Successfully implemented the Signal Usage Tracker, the first priority from the kaos brownie evaluation. The analyzer now detects undriven signals, including the Level 1 kaos brownie violation `THIS_SIGNAL_IS_NEVER_USED`.
+Successfully implemented the Signal Usage Tracker, the first priority from the kaos elf evaluation. The analyzer now detects undriven signals, including the Level 1 kaos elf violation `THIS_SIGNAL_IS_NEVER_USED`.
 
-**Key Achievement**: ✅ Level 1 kaos brownie violation detected (1/3 expected detections)
+**Key Achievement**: ✅ Level 1 kaos elf violation detected (1/3 expected detections)
 
 ## Implementation Details
 
@@ -98,9 +98,9 @@ Added to reporting:
 
 ## Test Results
 
-### Kaos Brownie Corpus
+### Kaos Elf Corpus
 
-Tested on all 4 kaos brownie variants:
+Tested on all 4 kaos elf variants:
 
 | File | Signals Declared | Violations Detected | Expected Violation | Status |
 |------|-----------------|---------------------|-------------------|---------|
@@ -116,7 +116,7 @@ contrib/lzx-kaos-levels/enhance-level1-undriven.vhd:44:3: error:
   Signal: 'THIS_SIGNAL_IS_NEVER_USED'
 ```
 
-✅ **SUCCESS**: The kaos brownie violation at Level 1 is correctly identified!
+✅ **SUCCESS**: The kaos elf violation at Level 1 is correctly identified!
 
 ### Clean File Testing
 
@@ -190,7 +190,7 @@ result <= s_gain * input;  -- s_gain read is NOT tracked
 
 ## Comparison to Evaluation Baseline
 
-### Before (KAOS_BROWNIE_EVALUATION_REPORT.md):
+### Before (KAOS_ELF_EVALUATION_REPORT.md):
 
 ```
 Detection Rate: 0/4 violations detected (0%)
@@ -291,7 +291,7 @@ Signal tracking: ✅ Declarations tracked
 
 ## Conclusion
 
-Phase 1 of ADC-012 successfully demonstrates signal usage tracking and detects the Level 1 kaos brownie violation. While false positives remain high due to incomplete process parsing, the core infrastructure is solid and ready for enhancement.
+Phase 1 of ADC-012 successfully demonstrates signal usage tracking and detects the Level 1 kaos elf violation. While false positives remain high due to incomplete process parsing, the core infrastructure is solid and ready for enhancement.
 
 **Key Achievement**: First violation detection implementation in Spellcraft! 🎉
 

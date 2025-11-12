@@ -39,8 +39,8 @@ Signal usage analysis feature evaluation (ADC-012)
 - Test results on Lumarian corpus
 - False positive analysis
 
-### KAOS_BROWNIE_EVALUATION_REPORT.md
-Kaos Brownie violation injection framework evaluation (ADC-011)
+### KAOS_ELF_EVALUATION_REPORT.md
+Kaos Elf violation injection framework evaluation (ADC-011)
 - Test corpus generation
 - Violation detection accuracy
 - Level 1-5 chaos validation
@@ -67,5 +67,5 @@ For understanding the 0.4.0 release:
 
 For specific features:
 - Signal usage: SIGNAL_USAGE_TRACKER_REPORT.md
-- Violation detection: KAOS_BROWNIE_EVALUATION_REPORT.md
+- Violation detection: KAOS_ELF_EVALUATION_REPORT.md
 - Documentation: DIAGRAM_GENERATION_SUMMARY.md + LINT_REPORT.md

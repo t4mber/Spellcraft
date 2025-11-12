@@ -85,7 +85,7 @@ sed -i '' 's/end architecture;$/end rtl;/' contrib/lzx/mirrorbound/*.vhd
 sed -i '' 's/end architecture;$/end mirrorbound;/' contrib/lzx/mirrorbound/mirrorbound.vhd
 ```
 
-## 2025-11-09 - LZX Kaos Brownie Test Corpus
+## 2025-11-09 - LZX Kaos Elf Test Corpus
 
 ### Purpose
 Created systematic test corpus with injected hardware violations to validate
@@ -105,7 +105,7 @@ Located in `contrib/lzx-kaos/` and `contrib/lzx-kaos-levels/`:
 
 ### Generation Method
 ```bash
-python3 scripts/kaos-brownie-impl.py \
+python3 scripts/kaos-elf-impl.py \
   --source contrib/lzx/lumarian/enhance.vhd \
   --output contrib/lzx-kaos
 ```

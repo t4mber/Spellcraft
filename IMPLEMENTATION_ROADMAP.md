@@ -1,22 +1,25 @@
 # Spellcraft Implementation Roadmap
 
 **Generated**: 2025-11-10
-**Status**: Active Development
+**Updated**: 2025-11-12
+**Status**: 0.4.0 Release Ready
 
 ## Current State
 
 ### ✅ Completed
 - **VHDL Parser** (ADC-001, ADC-009): 100% success on test corpus
-- **Signal Usage Tracker** (ADC-012 Priority 1): Detects undriven signals
-- **Kaos Brownie Framework** (ADC-011): Generates test violations
-- **Level 1 Detection**: Successfully identifies obvious violations
+- **Process Body Parsing** (ADC-013): 100% parse success (13/13 files)
+- **Component Output Tracking** (ADC-012 Priority 1): Heuristic-based implementation
+- **Signal Usage Tracker** (ADC-012): 76% clean pass rate (up from 38%)
+- **Kaos Elf Framework** (ADC-011): Generates test violations
+- **Level 1-2 Detection**: Successfully identifies undriven/unused signals
 
 ### 🚧 In Progress
-- **Violation Detection** (ADC-012): Priority 1 complete, 2-3 pending
+- **External Entity Support** (ADC-015): 2/13 files need multi-file parsing
 
-### ⚠️ Critical Issues
-- **100% False Positive Rate**: All signals in processes appear undriven
-- **Parser Limitations**: 8/13 Lumarian files fail to parse
+### ⚠️ Known Issues
+- **Array Indexing**: delay.vhd has 1 false positive (signal assigned via array index)
+- **Heuristic Limitations**: May miss unusual port naming conventions
 
 ## Priority Tasks
 
@@ -123,7 +126,7 @@ ADC-013 (Process Parsing) [CRITICAL PATH]
 ## Resource Requirements
 
 - **Developer Time**: 4-6 weeks total
-- **Testing**: Kaos brownie corpus + Lumarian/Mirrorbound
+- **Testing**: Kaos elf corpus + Lumarian/Mirrorbound
 - **Documentation**: Update user guide with new features
 
 ## Contract References
@@ -133,7 +136,7 @@ ADC-013 (Process Parsing) [CRITICAL PATH]
 | [ADC-012](contracts/adc-012-violation-detection.qmd) | Violation Detection Framework | Partial | 1 |
 | [ADC-013](contracts/adc-013-process-parsing.qmd) | Process Body Parsing | Active | 1 |
 | [ADC-014](contracts/adc-014-warning-infrastructure.qmd) | Warning Infrastructure | Planned | 3 |
-| [ADC-011](contracts/adc-011-kaos-brownie.qmd) | Kaos Brownie Testing | Complete | - |
+| [ADC-011](contracts/adc-011-kaos-elf.qmd) | Kaos Elf Testing | Complete | - |
 
 ---
 

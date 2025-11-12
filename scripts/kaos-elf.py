@@ -1,13 +1,13 @@
 #!/usr/bin/env python3
 """
-Kaos Brownie VHDL Violation Injector
+Kaos Elf VHDL Violation Injector
 Contract: spellcraft-adc-011
 
 This script systematically injects known hardware violations into working VHDL
 designs to create a comprehensive test suite for violation detection.
 
 Usage:
-    python scripts/kaos-brownie.py --source contrib/lzx/lumarian/enhance.vhd
+    python scripts/kaos-elf.py --source contrib/lzx/lumarian/enhance.vhd
 
 The script will:
 1. Read the source VHDL file
@@ -18,7 +18,7 @@ The script will:
 IMPLEMENTATION INSTRUCTIONS FOR CLAUDE OPUS 4:
 ==============================================
 
-You are implementing a VHDL kaos brownie generator. Your goal is to inject
+You are implementing a VHDL kaos elf generator. Your goal is to inject
 realistic hardware violations into clean VHDL code for testing purposes.
 
 STEP 1: ANALYZE SOURCE FILE
@@ -86,7 +86,7 @@ For EACH violation:
 2. Inject SINGLE violation at appropriate location
 
 3. Add marker comment at injection point:
-   -- KAOS-BROWNIE: cat1-violation1
+   -- KAOS-ELF: cat1-violation1
    -- VIOLATION: Unregistered CDC crossing
    -- SEVERITY: catastrophic
    -- ORIGINAL: signal s_sync : std_logic;
@@ -193,7 +193,7 @@ from datetime import datetime
 
 def main():
     parser = argparse.ArgumentParser(
-        description='Generate VHDL kaos brownie test variants',
+        description='Generate VHDL kaos elf test variants',
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog=__doc__
     )
@@ -242,7 +242,7 @@ Output: {}
 
     print("\nNOTE: This is a specification template.")
     print("Implementation requires Claude Opus 4 or manual coding.")
-    print("See contract adc-011-kaos-brownie.qmd for full requirements.\n")
+    print("See contract adc-011-kaos-elf.qmd for full requirements.\n")
 
     return 0
 

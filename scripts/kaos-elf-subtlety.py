@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Kaos Brownie with Subtlety Levels
+Kaos Elf with Subtlety Levels
 Contract: spellcraft-adc-011 (Enhanced)
 
 Generates VHDL violations at different subtlety levels to test
@@ -14,7 +14,7 @@ Subtlety Levels:
 - Level 5 (Extremely Subtle): Edge cases that require deep understanding
 
 Usage:
-    python scripts/kaos-brownie-subtlety.py \\
+    python scripts/kaos-elf-subtlety.py \\
         --source contrib/lzx/lumarian/enhance.vhd \\
         --subtlety 1-5 \\
         --output contrib/lzx-kaos-levels
@@ -28,7 +28,7 @@ from pathlib import Path
 from datetime import datetime
 from typing import List, Dict, Tuple
 
-class SubtleKaosBrownie:
+class SubtleKaosElf:
     def __init__(self, source_path: str, output_dir: str, subtlety: int):
         self.source_path = Path(source_path)
         self.output_dir = Path(output_dir)
@@ -66,7 +66,7 @@ class SubtleKaosBrownie:
         for i, line in enumerate(lines):
             if 'begin' in line.lower() and 'architecture' not in line.lower():
                 marker = [
-                    "  -- KAOS-BROWNIE: level1-undriven",
+                    "  -- KAOS-ELF: level1-undriven",
                     "  -- SUBTLETY: 1 (Obvious)",
                     "  -- VIOLATION: Signal declared but completely undriven",
                     "  signal THIS_SIGNAL_IS_NEVER_USED : std_logic; -- OBVIOUS BUG!"
@@ -100,7 +100,7 @@ class SubtleKaosBrownie:
         for i, line in enumerate(lines):
             if 'begin' in line.lower() and i > 20:
                 marker = [
-                    "  -- KAOS-BROWNIE: level2-partial",
+                    "  -- KAOS-ELF: level2-partial",
                     "  -- SUBTLETY: 2 (Moderate)",
                     "  -- VIOLATION: Signal assigned in some paths, not others",
                     "  signal s_sometimes_driven : std_logic;"
@@ -144,7 +144,7 @@ class SubtleKaosBrownie:
             if 'signal' in line and 'downto 0' in line and 'WIDTH - 1' in line:
                 # Add a signal that will grow without protection
                 marker = [
-                    "  -- KAOS-BROWNIE: level3-bitgrowth",
+                    "  -- KAOS-ELF: level3-bitgrowth",
                     "  -- SUBTLETY: 3 (Subtle)",
                     "  -- VIOLATION: Arithmetic operation without overflow protection",
                     "  signal s_accumulator : unsigned(G_WIDTH - 1 downto 0); -- Will overflow!"
@@ -184,7 +184,7 @@ class SubtleKaosBrownie:
         for i, line in enumerate(lines):
             if 'signal' in line and 's_valid' in line:
                 marker = [
-                    "  -- KAOS-BROWNIE: level4-timing",
+                    "  -- KAOS-ELF: level4-timing",
                     "  -- SUBTLETY: 4 (Very Subtle)",
                     "  -- VIOLATION: Timing assumption - valid flag not synchronized properly",
                     "  signal s_cross_domain_valid : std_logic; -- Crosses from different clock!"
@@ -226,7 +226,7 @@ class SubtleKaosBrownie:
         for i, line in enumerate(lines):
             if 'begin' in line.lower() and i > 20:
                 marker = [
-                    "  -- KAOS-BROWNIE: level5-race",
+                    "  -- KAOS-ELF: level5-race",
                     "  -- SUBTLETY: 5 (Extremely Subtle)",
                     "  -- VIOLATION: Race condition in signal update order",
                     "  signal s_data_stage1 : unsigned(G_WIDTH - 1 downto 0);",
@@ -367,13 +367,13 @@ def main():
 
     print("""
 ╔═══════════════════════════════════════════════════════════════╗
-║     KAOS BROWNIE - SUBTLETY LEVEL EVALUATION                  ║
+║     KAOS ELF - SUBTLETY LEVEL EVALUATION                  ║
 ║            Contract: spellcraft-adc-011                       ║
 ╚═══════════════════════════════════════════════════════════════╝
 """)
 
-    brownie = SubtleKaosBrownie(args.source, args.output, args.subtlety)
-    brownie.generate()
+    elf = SubtleKaosElf(args.source, args.output, args.subtlety)
+    elf.generate()
 
     return 0
 

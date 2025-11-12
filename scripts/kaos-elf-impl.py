@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Kaos Brownie VHDL Violation Injector - Initial Implementation
+Kaos Elf VHDL Violation Injector - Initial Implementation
 Contract: spellcraft-adc-011
 
 This is a working implementation that generates a subset of violations
@@ -15,7 +15,7 @@ from pathlib import Path
 from datetime import datetime
 from typing import List, Dict, Tuple
 
-class VHDLKaosBrownie:
+class VHDLKaosElf:
     def __init__(self, source_path: str, output_dir: str):
         self.source_path = Path(source_path)
         self.output_dir = Path(output_dir)
@@ -55,7 +55,7 @@ class VHDLKaosBrownie:
                 original_line = line
                 # Add violation marker
                 violation_marker = [
-                    "  -- KAOS-BROWNIE: cat1-violation1",
+                    "  -- KAOS-ELF: cat1-violation1",
                     "  -- VIOLATION: Unregistered CDC crossing",
                     "  -- SEVERITY: catastrophic",
                     f"  -- ORIGINAL: {line.strip()}",
@@ -98,7 +98,7 @@ class VHDLKaosBrownie:
             if 'begin' in line.lower() and 'architecture' not in line.lower():
                 # Insert an undriven signal just before 'begin'
                 violation_marker = [
-                    "  -- KAOS-BROWNIE: cat3-violation1",
+                    "  -- KAOS-ELF: cat3-violation1",
                     "  -- VIOLATION: Undriven signal",
                     "  -- SEVERITY: subtle",
                     "  -- INJECTED: Signal declared but never assigned",
@@ -148,7 +148,7 @@ class VHDLKaosBrownie:
                 )
 
                 violation_marker = [
-                    "  -- KAOS-BROWNIE: cat7-violation1",
+                    "  -- KAOS-ELF: cat7-violation1",
                     "  -- VIOLATION: Off-by-one error",
                     "  -- SEVERITY: subtle",
                     f"  -- ORIGINAL: {original_line.strip()}",
@@ -239,7 +239,7 @@ class VHDLKaosBrownie:
 
     def generate_readme(self) -> None:
         """Generate README.md for the kaos corpus"""
-        readme_content = f"""# Kaos Brownie VHDL Test Corpus
+        readme_content = f"""# Kaos Elf VHDL Test Corpus
 
 **Contract**: spellcraft-adc-011
 **Generated**: {datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S')} UTC
@@ -346,7 +346,7 @@ python scripts/kaos-compare.py \\
 
 def main():
     parser = argparse.ArgumentParser(
-        description='Generate VHDL kaos brownie test variants (POC implementation)'
+        description='Generate VHDL kaos elf test variants (POC implementation)'
     )
     parser.add_argument(
         '--source',
@@ -363,14 +363,14 @@ def main():
 
     print("""
 ╔═══════════════════════════════════════════════════════════════╗
-║          KAOS BROWNIE VHDL VIOLATION INJECTOR                 ║
+║          KAOS ELF VHDL VIOLATION INJECTOR                 ║
 ║          Proof of Concept Implementation                      ║
 ║                 Contract: spellcraft-adc-011                  ║
 ╚═══════════════════════════════════════════════════════════════╝
 """)
 
-    brownie = VHDLKaosBrownie(args.source, args.output)
-    brownie.generate()
+    elf = VHDLKaosElf(args.source, args.output)
+    elf.generate()
 
     return 0
 

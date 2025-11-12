@@ -16,6 +16,7 @@ import qualified Data.Map.Strict as Map
 import Data.Set (Set)
 import qualified Data.Set as Set
 import Data.Text (Text)
+import qualified Data.Text as Text
 import Debug.Trace (trace)
 import VHDL.AST
 import VHDL.SourceLocation (SourceLocation)
@@ -112,8 +113,41 @@ collectFromArchStatement (ConcurrentAssignment target _ loc) =
   case targetToSignalName target of
     Just name -> [(name, [loc])]
     Nothing -> []  -- Complex target without clear signal name
-collectFromArchStatement (ComponentInstStmt _) =
-  []
+collectFromArchStatement (ComponentInstStmt inst) =
+  -- ADC-IMPLEMENTS: spellcraft-adc-012
+  -- Component output ports assign to signals
+  -- Heuristic: Assume ports with common output names are outputs
+  -- Full solution requires parsing component entity declarations
+  let portMaps = compPortMap inst
+      outputPorts = filter isLikelyOutputPort portMaps
+      assignments = [ (targetSignal, [compLocation inst])
+                    | (_, expr) <- outputPorts
+                    , Just targetSignal <- [targetToSignalName expr]
+                    ]
+  in trace ("collectFromArchStatement (ComponentInstStmt): found " ++ show (length assignments) ++ " output port assignments") assignments
+
+-- | Heuristic to determine if a port is likely an output port
+-- ADC-IMPLEMENTS: spellcraft-adc-012
+-- This is a temporary heuristic until full component entity parsing is implemented
+isLikelyOutputPort :: (Identifier, Expression) -> Bool
+isLikelyOutputPort (portName, _) =
+  let lowerName = Text.toLower portName
+  in -- Common VHDL output port naming conventions
+     (any (`Text.isInfixOf` lowerName)
+       [ "result", "output", "out", "valid", "ready", "done"
+       , "data_out", "addr_out", "write_data"
+       , "high_pass", "low_pass", "filtered"  -- Filter outputs
+       , "q", "dout"  -- Memory/register outputs
+       ]
+     -- Exclude common input patterns
+     && not (any (`Text.isInfixOf` lowerName)
+       [ "input", "in_", "_in", "read", "enable", "reset", "clk", "clock"
+       , "addr", "address", "sel", "select", "control", "mode"
+       ])
+     )
+     -- Also check for _o suffix (common convention: signal_o = output)
+     || Text.isSuffixOf "_o" lowerName
+     || Text.isSuffixOf "_out" lowerName
 
 -- | Extract base signal name from assignment target (ADC-022)
 targetToSignalName :: Expression -> Maybe Identifier

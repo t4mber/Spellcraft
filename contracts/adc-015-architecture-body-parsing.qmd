@@ -171,7 +171,7 @@ architecture =
 - **Parse Success Rate:** Maintain current level
 
 ### Qualitative
-- ✅ Level 1 Kaos Brownie example detects only `THIS_SIGNAL_IS_NEVER_USED`
+- ✅ Level 1 Kaos Elf example detects only `THIS_SIGNAL_IS_NEVER_USED`
 - ✅ Signals assigned in processes not reported as undriven
 - ✅ Component outputs properly tracked
 - ✅ Clear error messages if parsing fails
@@ -198,7 +198,7 @@ describe "Architecture Body Parsing" $ do
 
 ### Integration Tests
 ```bash
-# Level 1 Kaos Brownie - should detect 1 violation (not 13!)
+# Level 1 Kaos Elf - should detect 1 violation (not 13!)
 spellcraft contrib/lzx-kaos-levels/enhance-level1-undriven.vhd
 # Expected: 1 error (THIS_SIGNAL_IS_NEVER_USED only)
 # Actual before fix: 13 errors (all signals)
@@ -257,7 +257,7 @@ spellcraft test/fixtures/simple_process.vhd
 3. Fix statement collection bug
 
 ### Short Term (Hour 2-3)
-4. Test on all Kaos Brownie examples
+4. Test on all Kaos Elf examples
 5. Verify false positive rate drops
 6. Run full test suite
 
@@ -270,7 +270,7 @@ spellcraft test/fixtures/simple_process.vhd
 
 1. ✅ Architecture statements properly collected
 2. ✅ Signal usage analysis functional
-3. ✅ Level 1 Kaos Brownie detection working
+3. ✅ Level 1 Kaos Elf detection working
 4. ✅ All tests passing
 5. ✅ Debug traces showing statement counts
 6. 📖 (Optional) Parser documentation with clearer syntax

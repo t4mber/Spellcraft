@@ -1,4 +1,4 @@
-# Kaos Brownie Subtlety Evaluation Report
+# Kaos Elf Subtlety Evaluation Report
 
 **Contract**: spellcraft-adc-011
 **Date**: 2025-11-09
@@ -295,7 +295,7 @@ To reproduce these results:
 
 ```bash
 # Generate kaos variants
-python3 scripts/kaos-brownie-subtlety.py \\
+python3 scripts/kaos-elf-subtlety.py \\
   --source contrib/lzx/lumarian/enhance.vhd \\
   --subtlety 5 \\
   --output contrib/lzx-kaos-levels
@@ -327,7 +327,7 @@ The Spellcraft VHDL analyzer currently excels at parsing and basic structural an
 
 ### Success Criteria
 
-The kaos brownie framework has successfully:
+The kaos elf framework has successfully:
 - Created reproducible test methodology
 - Documented expected detection capabilities
 - Identified implementation priorities
@@ -342,12 +342,12 @@ When detection features are implemented, re-run this evaluation to measure progr
 python3 scripts/kaos-compare.py \\
   --manifest contrib/lzx-kaos-levels/chaos-violations-level5.json \\
   --results kaos-detection-report.json \\
-  --baseline KAOS_BROWNIE_EVALUATION_REPORT.md
+  --baseline KAOS_ELF_EVALUATION_REPORT.md
 ```
 
 ---
 
 **Report Generated**: 2025-11-09
-**Framework**: Kaos Brownie (spellcraft-adc-011)
+**Framework**: Kaos Elf (spellcraft-adc-011)
 **Status**: Detection features await implementation
 **Next Review**: After violation detection implementation

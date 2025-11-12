@@ -9,7 +9,7 @@ created: 2025-11-10
 
 ## Purpose
 
-Implement parsing of VHDL attribute access expressions (`identifier'attribute_name`) to unblock Level 1 Kaos Brownie detection and achieve 90%+ parse success rate on LZX corpus.
+Implement parsing of VHDL attribute access expressions (`identifier'attribute_name`) to unblock Level 1 Kaos Elf detection and achieve 90%+ parse success rate on LZX corpus.
 
 **Business Impact:** Attributes are fundamental VHDL features used in nearly every design. Without attribute support, 90% of real VHDL files fail to parse, making the tool unusable in production.
 
@@ -18,7 +18,7 @@ Implement parsing of VHDL attribute access expressions (`identifier'attribute_na
 ### Current Behavior
 - Expressions like `signal'length` fail to parse
 - Parser reports "expecting end of input" when encountering `'` after identifier
-- Level 1 Kaos Brownie test fails completely
+- Level 1 Kaos Elf test fails completely
 - Estimated 90% of LZX corpus files contain attributes
 
 ### Example Failures
@@ -40,7 +40,7 @@ constant WIDTH : integer := bus'high - bus'low + 1;
 **Actual:** Parse error at `'` character
 
 ### Impact
-- ❌ Level 1 Kaos Brownie fails to parse
+- ❌ Level 1 Kaos Elf fails to parse
 - ❌ ~90% of LZX corpus fails to parse
 - ❌ Blocks v0.4.0 release (requires 90%+ parse rate)
 - ❌ Tool unusable on real VHDL designs
@@ -209,12 +209,12 @@ parseBaseExpr = choice
 ### Quantitative
 - **Attribute Parse Rate:** 0% → 100%
 - **LZX Parse Success:** ~30% → 90%+
-- **Level 1 Kaos Brownie:** Parse failure → Correct detection
+- **Level 1 Kaos Elf:** Parse failure → Correct detection
 - **Test Pass Rate:** Maintain 100%
 
 ### Qualitative
 - ✅ `test/fixtures/attribute.vhd` parses successfully
-- ✅ Level 1 Kaos Brownie detects only `THIS_SIGNAL_IS_NEVER_USED`
+- ✅ Level 1 Kaos Elf detects only `THIS_SIGNAL_IS_NEVER_USED`
 - ✅ Common attributes work: `'event`, `'length`, `'range`, `'left`, `'right`
 - ✅ Clock detection patterns (`rising_edge(clk)` + `clk'event`) both work
 
@@ -249,7 +249,7 @@ describe "Attribute Parsing" $ do
 spellcraft test/fixtures/attribute.vhd
 # Expected: Parse success, detect no violations
 
-# Level 1 Kaos Brownie
+# Level 1 Kaos Elf
 spellcraft contrib/lzx-kaos-levels/enhance-level1-undriven.vhd
 # Expected: Parse success, detect 1 violation (THIS_SIGNAL_IS_NEVER_USED)
 
@@ -314,7 +314,7 @@ sig'event'image   -- Chained attributes (unusual but legal)
 ## Dependencies
 
 ### Blocks
-- Level 1 Kaos Brownie detection - BLOCKED
+- Level 1 Kaos Elf detection - BLOCKED
 - LZX 90% parse rate - BLOCKED
 - v0.4.0 Release - BLOCKED
 
@@ -346,7 +346,7 @@ sig'event'image   -- Chained attributes (unusual but legal)
 
 ### Short Term (Hour 2-3)
 4. Add parameterized attribute support
-5. Test on Level 1 Kaos Brownie
+5. Test on Level 1 Kaos Elf
 6. Run full test suite
 
 ### Medium Term (Hour 4+)
@@ -359,7 +359,7 @@ sig'event'image   -- Chained attributes (unusual but legal)
 1. ✅ `AttributeExpr` added to AST
 2. ✅ Simple attributes parse correctly (`'event`, `'length`, etc.)
 3. ✅ Parameterized attributes parse correctly (`'image(x)`)
-4. ✅ Level 1 Kaos Brownie parses and detects violations
+4. ✅ Level 1 Kaos Elf parses and detects violations
 5. ✅ All existing tests still passing
 6. ✅ LZX parse rate >= 90%
 
@@ -376,7 +376,7 @@ sig'event'image   -- Chained attributes (unusual but legal)
 **User Expectation:** From IMPLEMENTATION_ROADMAP.md:
 > Next Steps:
 > 1. Implement attribute parsing (e.g., identifier'attribute_name)
-> 2. Test on Level 1 Kaos Brownie
+> 2. Test on Level 1 Kaos Elf
 > 3. Run LZX parse rate test
 > 4. Move to EVALUATOR phase
 

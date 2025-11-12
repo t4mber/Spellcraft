@@ -1,16 +1,16 @@
 ---
-title: "Kaos Brownie VHDL Violation Injector"
+title: "Kaos Elf VHDL Violation Injector"
 id: spellcraft-adc-011
 version: 1.0.0
 status: active
 created: 2025-11-09
 ---
 
-# Kaos Brownie VHDL Violation Injector
+# Kaos Elf VHDL Violation Injector
 
 ## Purpose
 
-Create a systematic test harness that injects known VHDL hardware violations into working designs to validate the analyzer's detection capabilities. This "kaos brownie" approach ensures comprehensive coverage of both catastrophic and subtle hardware errors.
+Create a systematic test harness that injects known VHDL hardware violations into working designs to validate the analyzer's detection capabilities. This "kaos elf" approach ensures comprehensive coverage of both catastrophic and subtle hardware errors.
 
 ## Motivation
 
@@ -126,7 +126,7 @@ contrib/lzx-kaos/
 
 ### Parity: Generator Script
 
-**Location**: `scripts/kaos-brownie.py`
+**Location**: `scripts/kaos-elf.py`
 
 The generator must:
 1. Parse source VHDL files to understand structure
@@ -144,7 +144,7 @@ The generator must:
 
 **Inline Documentation**: Every injection includes:
 ```vhdl
--- KAOS-BROWNIE: cat1-violation3
+-- KAOS-ELF: cat1-violation3
 -- VIOLATION: Unregistered CDC crossing
 -- SEVERITY: catastrophic
 -- ORIGINAL: [3 lines of original code]
@@ -153,7 +153,7 @@ The generator must:
 
 ### Generator Instructions (For LLM Implementation)
 
-When implementing the kaos brownie generator:
+When implementing the kaos elf generator:
 
 1. **Parse Phase**:
    - Identify all signal declarations
@@ -196,7 +196,7 @@ When implementing the kaos brownie generator:
 
 ```bash
 # Generate kaos variants
-python scripts/kaos-brownie.py \
+python scripts/kaos-elf.py \
   --source contrib/lzx/lumarian/enhanced.vhd \
   --output contrib/lzx-kaos \
   --manifest kaos-violations.json

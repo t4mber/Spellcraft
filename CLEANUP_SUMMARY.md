@@ -34,7 +34,7 @@
 - `PARSING_COVERAGE_REPORT.md`
 - `DIAGRAM_GENERATION_SUMMARY.md`
 - `LINT_REPORT.md`
-- `KAOS_BROWNIE_EVALUATION_REPORT.md`
+- `KAOS_ELF_EVALUATION_REPORT.md`
 - `SIGNAL_USAGE_TRACKER_REPORT.md`
 
 **Created**:
@@ -62,7 +62,7 @@ spellcraft/
 │       ├── PARSING_COVERAGE_REPORT.md
 │       ├── DIAGRAM_GENERATION_SUMMARY.md
 │       ├── LINT_REPORT.md
-│       ├── KAOS_BROWNIE_EVALUATION_REPORT.md
+│       ├── KAOS_ELF_EVALUATION_REPORT.md
 │       └── SIGNAL_USAGE_TRACKER_REPORT.md
 │
 ├── src/                           # Source code
