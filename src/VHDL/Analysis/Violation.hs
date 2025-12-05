@@ -35,17 +35,26 @@ detectFrequencyViolations graph lib =
            Nothing -> []
            Just spec ->
              -- ADC-IMPLEMENTS: spellcraft-adc-021
+             -- ADC-IMPLEMENTS: spellcraft-adc-027
              -- Check all input ports with clock constraints
              -- Port map now contains expressions, extract signal identifiers
-             let inputPorts = [(port, sig) | (port, expr) <- compPortMap comp
-                                            , Just sig <- [exprToSignalName expr]
-                                            , hasClockConstraint port spec]
+             let inputPorts = [(pname, sig) | (formalExpr, actualExpr) <- compPortMap comp
+                                            , Just pname <- [formalToIdent formalExpr]
+                                            , Just sig <- [exprToSignalName actualExpr]
+                                            , hasClockConstraint pname spec]
              in concatMap (checkPort compName compLoc spec) inputPorts
 
     checkPort compName compLoc spec (portName, signalName) =
       case Map.lookup signalName (cgNodes graph) of
         Nothing -> []
         Just node -> checkNodeAgainstSpec node compName portName spec compLoc
+
+    -- ADC-IMPLEMENTS: spellcraft-adc-027
+    -- Extract identifier from formal expression (handles indexed ports)
+    formalToIdent (IdentifierExpr name) = Just name
+    formalToIdent (IndexedName baseExpr _) = formalToIdent baseExpr
+    formalToIdent (SliceExpr baseExpr _ _ _) = formalToIdent baseExpr
+    formalToIdent _ = Nothing
 
     -- ADC-IMPLEMENTS: spellcraft-adc-021
     -- Extract signal name from expression (for violation detection)

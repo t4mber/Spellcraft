@@ -483,6 +483,45 @@ If critical issues emerge:
 - **spellcraft-adc-005:** CLI Interface (consumes parser output)
 - **spellcraft-adc-007:** Clock Source Detection (depends on complete parse)
 
+### Codeglow Enhancements (Added 2025-12-04)
+
+The following enhancements were added to support the codeglow corpus:
+
+#### Multi-Signal Declarations
+Support for comma-separated signal names in a single declaration:
+```vhdl
+signal s1_r, s1_g, s1_b : unsigned(G_WIDTH - 1 downto 0);
+```
+
+**Implementation:**
+- `signalDecl` parser returns `[SignalDecl]` instead of single `SignalDecl`
+- `parseDeclarations` flattens the list of signal declarations
+- File: `src/VHDL/Parser.hs`
+
+#### Based Literals (Hex, Binary, Octal)
+Support for VHDL based string literals:
+```vhdl
+signal lfsr_state : unsigned(15 downto 0) := x"BEEF";
+signal mask : std_logic_vector(3 downto 0) := b"1010";
+```
+
+**Implementation:**
+- `basedLiteral` parser in `src/VHDL/Lexer.hs`
+- `BasedLiteral Text` constructor in `src/VHDL/AST.hs`
+- `parseLiteral` updated to include based literals
+
+#### Test Coverage
+- `test/fixtures/multi_signal_decl.vhd` - Multi-signal declaration test
+- `test/fixtures/test_hex_init.vhd` - Hex literal initialization test
+- `test/fixtures/codeglow_pattern.vhd` - Combined pattern test
+- Tests in `test/VHDL/Parser/WorkLibrarySpec.hs`
+
+#### Verification
+```bash
+$ stack exec spellcraft -- contrib/t4mber/codeglow/*.vhd
+Parse results - VHDL errors: 0, designs: 4, Clash violations: 0
+```
+
 ### Future Enhancements
 
 - **VHDL-2008 Full Support:** Protected types, context clauses

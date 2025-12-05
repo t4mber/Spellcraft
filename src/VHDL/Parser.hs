@@ -225,14 +225,17 @@ parseDirection = choice
   , keyword "in" >> pure Input
   ]
 
--- | Parse signal declaration
+-- | Parse signal declaration with support for multiple signal names
 -- Contract: spellcraft-adc-012 Section: Signal Usage Tracker
 -- ADC-IMPLEMENTS: spellcraft-adc-018
-signalDecl :: Parser SignalDecl
+-- ADC-IMPLEMENTS: spellcraft-adc-008
+-- Supports: signal a, b, c : type := init;
+signalDecl :: Parser [SignalDecl]
 signalDecl = do
   pos <- getSourcePos
   void $ keyword "signal"
-  name <- identifier
+  -- Parse comma-separated list of signal names
+  names <- identifier `sepBy1` comma
   void colon
   sigType <- typeSpec
   -- Check for optional initialization: := expression
@@ -240,12 +243,15 @@ signalDecl = do
     void $ symbol ":="
     parseExpression
   void semi
-  pure SignalDecl
-    { sigDeclName = name
-    , sigDeclType = sigType
-    , sigDeclInitValue = initValue
-    , sigDeclLocation = sourcePosToLocation pos
-    }
+  -- Return a SignalDecl for each name
+  pure [ SignalDecl
+           { sigDeclName = name
+           , sigDeclType = sigType
+           , sigDeclInitValue = initValue
+           , sigDeclLocation = sourcePosToLocation pos
+           }
+       | name <- names
+       ]
 
 -- | Parse process statement
 -- Contract: spellcraft-adc-012 Section: Signal Usage Tracker
@@ -295,20 +301,23 @@ processStmt = do
 -- Enhanced: spellcraft-adc-013 Section: Expression Parsing
 -- ADC-IMPLEMENTS: spellcraft-adc-015
 -- ADC-IMPLEMENTS: spellcraft-adc-022
+-- ADC-IMPLEMENTS: spellcraft-adc-027
+-- Now supports conditional signal assignments: target <= value when cond else default;
 concurrentAssignment :: Parser ArchStatement
 concurrentAssignment = do
   sc  -- ADC-015: Consume leading whitespace/comments
   pure ()
   pos <- getSourcePos
-  
+
   -- Use parsePrimaryExpr to avoid consuming <= as comparison operator
   target <- parsePrimaryExpr  -- Changed from 'identifier' to support indexed assignments (ADC-022)
-  
+
   void $ symbol "<="
   pure ()
   -- Parse expression per ADC-013
-  expr <- parseExpression
-  
+  -- ADC-027: Support conditional expressions (when ... else)
+  expr <- parseConditionalExpr
+
   void semi
   pure ()
   pure ConcurrentAssignment
@@ -316,6 +325,24 @@ concurrentAssignment = do
     , concExpr = expr
     , concLocation = sourcePosToLocation pos
     }
+
+-- | Parse conditional expression (value when condition else default)
+-- ADC-IMPLEMENTS: spellcraft-adc-027
+-- Parses: expr1 when cond1 else expr2 [when cond2 else expr3]...
+parseConditionalExpr :: Parser Expression
+parseConditionalExpr = do
+  firstExpr <- parseExpression
+  -- Check for 'when' clause
+  mWhen <- optional $ try $ do
+    void $ keyword "when"
+    cond <- parseExpression
+    void $ keyword "else"
+    -- Recursively parse the else part (can be another conditional)
+    elseExpr <- parseConditionalExpr
+    pure (cond, elseExpr)
+  case mWhen of
+    Nothing -> pure firstExpr  -- Simple assignment, no condition
+    Just (cond, elseExpr) -> pure $ ConditionalExpr firstExpr cond elseExpr
 
 -- | Parse architecture-level statement (process, concurrent, or component)
 archStatement :: Parser ArchStatement
@@ -354,13 +381,15 @@ skipDeclaration = do
     skipTo p = skipManyTill anySingle (try $ lookAhead p) >> p
 
 -- | Parse declaration section (signals, constants, etc.)
+-- ADC-IMPLEMENTS: spellcraft-adc-008
+-- Updated to handle multi-signal declarations returning lists
 parseDeclarations :: Parser [SignalDecl]
 parseDeclarations = do
   decls <- many $ choice
-    [ try (Just <$> signalDecl)
+    [ try (Just <$> signalDecl)  -- Returns [SignalDecl]
     , try (skipDeclaration >> pure Nothing)
     ]
-  pure $ catMaybes decls
+  pure $ concat $ catMaybes decls  -- Flatten the list of lists
 
 -- | Parse architecture declaration
 architectureDecl :: Parser Architecture
@@ -467,7 +496,8 @@ genericMapClause = do
 -- | Parse port map
 -- ADC-IMPLEMENTS: spellcraft-adc-021
 -- ADC-IMPLEMENTS: spellcraft-adc-025
-portMapClause :: Parser [(Identifier, Expression)]
+-- ADC-IMPLEMENTS: spellcraft-adc-027
+portMapClause :: Parser [(Expression, Expression)]
 portMapClause = do
   void $ keyword "port"
   void $ keyword "map"
@@ -485,19 +515,25 @@ association = do
   expr <- parseExpression  -- Changed from 'value' to 'parseExpression'
   pure (name, expr)
 
--- | Parse port association (name => expression)
+-- | Parse port association (formal => actual)
 -- ADC-IMPLEMENTS: spellcraft-adc-021
 -- ADC-IMPLEMENTS: spellcraft-adc-025
--- Changed from identifier to Expression to support complex port connections like function calls
-portAssociation :: Parser (Identifier, Expression)
+-- ADC-IMPLEMENTS: spellcraft-adc-027
+-- Changed: Both formal and actual are now Expression to support:
+--   - Indexed formals: a(0) => sig, result(3) => data
+--   - Sliced formals: data(7 downto 0) => bus
+--   - Complex actuals: clk => system_clk, data => unsigned(input)
+portAssociation :: Parser (Expression, Expression)
 portAssociation = do
-  name <- identifier
-  
+  -- Parse formal (left side) - can be identifier, indexed, or sliced
+  formal <- parsePrimaryExpr
+
   void $ symbol "=>"
   pure ()
-  expr <- parseExpression  -- Changed from 'identifier' to 'parseExpression'
-  
-  pure (name, expr)
+  -- Parse actual (right side) - can be any expression
+  actual <- parseExpression
+
+  pure (formal, actual)
 
 -- | Parse value
 value :: Parser Value
@@ -622,8 +658,9 @@ parseIfStatement = do
 
 -- | Parse case statement
 -- ADC-IMPLEMENTS: spellcraft-adc-024
+-- ADC-IMPLEMENTS: spellcraft-adc-027
 -- Fixed: Use parseLiteral instead of parseExpression for when clause choices
--- Issue: parseExpression was failing on character/bit literals in this context
+-- Added: Support for OR choices (when "001" | "010" => ...)
 parseCaseStatement :: Parser Statement
 parseCaseStatement = do
   pos <- getSourcePos
@@ -642,14 +679,20 @@ parseCaseStatement = do
   where
     parseWhenClause = do
       void $ keyword "when"
-      -- Parse choice: try literal first (for '0', "000", etc.),
-      -- then 'others' keyword, finally identifiers
-      choice <- try parseLiteral
-          <|> (try (keyword "others") >> pure (IdentifierExpr "others"))
-          <|> (IdentifierExpr <$> identifier)
+      -- ADC-027: Parse choice list (supports | OR syntax)
+      -- Examples: when "001" | "010" => ..., when others => ...
+      choices <- parseCaseChoice `sepBy1` (symbol "|")
+      -- Combine multiple choices into an Aggregate for now
+      let choiceExpr = case choices of
+            [single] -> single
+            multiple -> Aggregate multiple  -- Use Aggregate to represent multiple choices
       void $ symbol "=>"
       stmts <- many (try (notFollowedBy nextWhenOrEnd >> parseSequentialStatement))
-      pure (choice, stmts)
+      pure (choiceExpr, stmts)
+    -- Parse a single case choice
+    parseCaseChoice = try parseLiteral
+          <|> (try (keyword "others") >> pure (IdentifierExpr "others"))
+          <|> (IdentifierExpr <$> identifier)
     nextWhenOrEnd = choice [keyword "when", keyword "end"]
 
 -- | Parse loop statement
@@ -667,9 +710,11 @@ parseLoopStatement = do
   range <- case loopVar of
     Just _ -> do
       start <- parseExpression
-      void $ keyword "to" <|> keyword "downto"
+      -- ADC-027: Capture direction for downto loop ranges
+      -- Use try on "downto" to allow backtracking when matching "to"
+      dir <- try (keyword "downto" >> pure DownTo) <|> (keyword "to" >> pure To)
       end <- parseExpression
-      pure $ Just (start, end)
+      pure $ Just (start, end, dir)
     Nothing -> do
       void $ keyword "loop"
       pure Nothing
@@ -775,11 +820,12 @@ parsePrimaryExpr = do
   -- Check for postfix operators: attributes ('attribute) and selected names (.field)
   parsePostfixOps base
 
--- ADC-IMPLEMENTS: spellcraft-adc-016, spellcraft-adc-026
--- | Parse postfix operators (attributes and selected names)
+-- ADC-IMPLEMENTS: spellcraft-adc-016, spellcraft-adc-026, spellcraft-adc-027
+-- | Parse postfix operators (attributes, selected names, and cascaded index/slice)
 -- Handles:
 --   - Attributes: signal'event, arr'length, type'image(value)
 --   - Selected names: signal.field, record.field1.field2
+--   - Cascaded index/slice: arr(0)(7 downto 0), registers_in(12)(3 downto 0)
 --   - Mixed: signal.field'length, arr(i).field
 parsePostfixOps :: Expression -> Parser Expression
 parsePostfixOps base = do
@@ -796,6 +842,20 @@ parsePostfixOps base = do
         lookAhead $ satisfy (\c -> isAlpha c || c == '_')
         fieldName <- identifier
         pure $ \expr -> SelectedName expr fieldName
+    , do  -- ADC-027: Cascaded index or slice: (index) or (high downto low)
+        -- This handles: arr(0)(7 downto 0), data(i)(j)
+        result <- parens $ do
+          firstExpr <- parseExpression
+          choice
+            [ try $ do
+                dir <- try (keyword "downto" >> pure DownTo) <|> (keyword "to" >> pure To)
+                secondExpr <- parseExpression
+                pure $ Right (dir, firstExpr, secondExpr)  -- It's a slice
+            , pure $ Left firstExpr  -- It's an index
+            ]
+        case result of
+          Right (dir, high, low) -> pure $ \expr -> SliceExpr expr high low dir
+          Left idx -> pure $ \expr -> IndexedName expr idx
     ]
   -- Apply all postfix operators left-to-right
   pure $ foldl (\acc applyOp -> applyOp acc) base ops
@@ -906,10 +966,13 @@ parseAggregate = do
     multiple -> pure $ Aggregate multiple  -- Multiple elements is aggregate
 
 -- | Parse literal
+-- ADC-IMPLEMENTS: spellcraft-adc-008
+-- Extended to support VHDL based literals (x"BEEF", b"1010", o"777")
 parseLiteral :: Parser Expression
 parseLiteral = LiteralExpr <$> choice
   [ try (RealLiteral <$> double)
   , try (IntLiteral <$> integer)
+  , try (BasedLiteral <$> basedLiteral)  -- x"BEEF", b"1010", o"777"
   , try (StringLiteral <$> stringLiteral)
   , try parseBitLiteral
   , try parseCharLiteral

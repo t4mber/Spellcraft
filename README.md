@@ -23,17 +23,17 @@ A hardware design verification tool that helps you _craft_ your hardware designs
 - **Process Body Parsing**: Full support for if/elsif/else, signal assignments, and control flow
 - **Work Library Support**: Complete VHDL library and use clause parsing
 - **Clear Error Messages**: Precise file:line:column error reporting with source location tracking
-- **Comprehensive Testing**: 96% parse success on 27 production VHDL files
+- **Comprehensive Testing**: 100% parse success on LZX corpus (23 files)
 - **Fast Performance**: Sub-second analysis (~0.2s per file)
 
 ## Status
 
-**Version:** 0.4.0
-**Release Date:** 2025-11-12
-**Build:** ✅ Passing
-**Tests:** ✅ 96% parse success (26/27 files), 75% violation detection
-**Features:** ✅ VHDL parsing, signal usage analysis, component output tracking
-**Quality:** ✅ 55% clean pass on production code, 0 crashes
+**Version:** 0.5.0
+**Release Date:** 2025-12-04
+**Build:** Passing
+**Tests:** 100% parse success (23/23 LZX files), 39/39 unit tests
+**Features:** VHDL parsing, signal usage analysis, multi-signal declarations, based literals
+**Quality:** 100% parse rate on LZX corpus, 0 crashes
 
 ## Installation
 
@@ -118,16 +118,16 @@ Spellcraft includes comprehensive test infrastructure:
 - **Parser Fixtures**: 6 unit test files for parser development
 - **Automated Testing**: `python3 tests/corpus_test.py`
 
-### Test Results (v0.4.0)
+### Test Results (v0.5.0)
 
-| Corpus | Files | Parse Success | Clean Pass |
-|--------|-------|---------------|------------|
-| Lumarian | 13 | 100% | 76% |
-| Mirrorbound | 10 | 90% | 40% |
-| KAOS ELF | 4 | 100% | 75% detection |
-| **Overall** | **27** | **96%** | **55%** |
+| Corpus | Files | Parse Success |
+|--------|-------|---------------|
+| LZX Lumarian | 13 | 100% |
+| LZX Mirrorbound | 10 | 100% |
+| Codeglow | 4 | 100% |
+| **Overall** | **27** | **100%** |
 
-See `docs/reports/2025-11-12-comprehensive-evaluation.md` for full evaluation report.
+See `RELEASE-v0.5.0.md` for full release notes.
 
 ## Project Structure
 

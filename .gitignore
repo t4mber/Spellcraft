@@ -55,6 +55,21 @@ build.log
 .DS_Store
 Thumbs.db
 
-# Contributed code for testing (tracked separately via contrib/CONTRIB_CHANGES.md)
-contrib/
+# Contributed code for testing
+# Track specific contrib subdirectories
+contrib/*
 !contrib/CONTRIB_CHANGES.md
+!contrib/README.md
+!contrib/t4mber/
+
+# ADC Temporary Files
+claude_tmp/
+adc_files/refinement/
+
+# ADC Configuration
+.adcconfig.json
+*.adc-backup
+contracts/*.tmp
+contracts/*.bak
+adc_files/
+.venv/

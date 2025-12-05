@@ -5,6 +5,66 @@ All notable changes to the Spellcraft will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.0] - 2025-12-04
+
+### Added - Parser Enhancements for 100% LZX Parse Rate 🎯
+
+#### Multi-Signal Declaration Support (ADC-008)
+- **Added:** Support for comma-separated signal declarations (`signal a, b, c : type;`)
+- **Added:** Parser returns list of `SignalDecl` for multi-signal declarations
+- **Impact:** Codeglow corpus now parses 100% (was 50%)
+- **Files:** `src/VHDL/Parser.hs`, `src/VHDL/AST.hs`
+
+#### Based Literal Support (ADC-008)
+- **Added:** Hex literal parsing (`x"BEEF"`, `X"CAFE"`)
+- **Added:** Binary literal parsing (`b"1010"`, `B"1100"`)
+- **Added:** Octal literal parsing (`o"777"`, `O"123"`)
+- **Added:** `BasedLiteral Text` constructor in AST
+- **Impact:** Signal initializers with hex values now parse correctly
+- **Files:** `src/VHDL/Lexer.hs`, `src/VHDL/AST.hs`
+
+#### For-Loop Direction Parsing Fix
+- **Fixed:** Backtracking issue with `downto` vs `to` keywords
+- **Root Cause:** `keyword "downto"` consumed input before failing, preventing `to` alternative
+- **Solution:** Added `try` wrapper for proper backtracking
+- **Impact:** LZX corpus parse rate: 70% → 100%
+- **Files:** `src/VHDL/Parser.hs`
+
+#### Codeglow VHDL Corpus
+- **Added:** 4 codeglow VHDL files with analysis documentation
+- **Added:** Test fixtures based on codeglow patterns
+- **Files:** `contrib/t4mber/codeglow/`, `test/fixtures/`
+
+### Changed
+
+#### Contract Consolidation
+- **Renamed:** `adc-009-vhdl-parser-enhancement.qmd` → `adc-008-vhdl-parser-enhancement.qmd`
+- **Updated:** All `ADC-IMPLEMENTS` markers to reference `spellcraft-adc-008`
+- **Added:** Codeglow enhancements section to ADC-008 contract
+
+#### .gitignore Simplification
+- **Simplified:** Contrib directory rules
+- **Changed:** Now tracks `contrib/t4mber/` directly (lzx remains ignored)
+
+### Testing
+
+**Parse Success Rate:**
+- **LZX Lumarian:** 100% (13/13 files) ✅
+- **LZX Mirrorbound:** 100% (10/10 files) ✅
+- **Codeglow:** 100% (4/4 files) ✅
+- **Overall:** 100% (23/23 corpus files)
+
+**Test Suite:**
+- All 39 tests passing
+- New fixtures: `codeglow_pattern.vhd`, `multi_signal_decl.vhd`, `test_hex_init.vhd`
+
+### Contract Compliance
+
+**Contracts Updated:**
+- ✅ ADC-008: Extended with multi-signal declarations, based literals, codeglow support
+
+---
+
 ## [0.4.0] - 2025-11-12
 
 ### Added - Signal Usage Analysis & Component Tracking 🎯

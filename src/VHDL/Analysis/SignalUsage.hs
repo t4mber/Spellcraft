@@ -126,28 +126,41 @@ collectFromArchStatement (ComponentInstStmt inst) =
                     ]
   in trace ("collectFromArchStatement (ComponentInstStmt): found " ++ show (length assignments) ++ " output port assignments") assignments
 
+-- | Extract identifier from a formal expression
+-- ADC-IMPLEMENTS: spellcraft-adc-027
+-- Handles indexed formals like a(0) by extracting the base identifier
+formalToIdentifier :: Expression -> Maybe Identifier
+formalToIdentifier (IdentifierExpr name) = Just name
+formalToIdentifier (IndexedName baseExpr _) = formalToIdentifier baseExpr
+formalToIdentifier (SliceExpr baseExpr _ _ _) = formalToIdentifier baseExpr
+formalToIdentifier _ = Nothing
+
 -- | Heuristic to determine if a port is likely an output port
 -- ADC-IMPLEMENTS: spellcraft-adc-012
+-- ADC-IMPLEMENTS: spellcraft-adc-027
 -- This is a temporary heuristic until full component entity parsing is implemented
-isLikelyOutputPort :: (Identifier, Expression) -> Bool
-isLikelyOutputPort (portName, _) =
-  let lowerName = Text.toLower portName
-  in -- Common VHDL output port naming conventions
-     (any (`Text.isInfixOf` lowerName)
-       [ "result", "output", "out", "valid", "ready", "done"
-       , "data_out", "addr_out", "write_data"
-       , "high_pass", "low_pass", "filtered"  -- Filter outputs
-       , "q", "dout"  -- Memory/register outputs
-       ]
-     -- Exclude common input patterns
-     && not (any (`Text.isInfixOf` lowerName)
-       [ "input", "in_", "_in", "read", "enable", "reset", "clk", "clock"
-       , "addr", "address", "sel", "select", "control", "mode"
-       ])
-     )
-     -- Also check for _o suffix (common convention: signal_o = output)
-     || Text.isSuffixOf "_o" lowerName
-     || Text.isSuffixOf "_out" lowerName
+isLikelyOutputPort :: (Expression, Expression) -> Bool
+isLikelyOutputPort (formalExpr, _) =
+  case formalToIdentifier formalExpr of
+    Nothing -> False  -- Can't determine, assume input
+    Just portName ->
+      let lowerName = Text.toLower portName
+      in -- Common VHDL output port naming conventions
+         (any (`Text.isInfixOf` lowerName)
+           [ "result", "output", "out", "valid", "ready", "done"
+           , "data_out", "addr_out", "write_data"
+           , "high_pass", "low_pass", "filtered"  -- Filter outputs
+           , "q", "dout"  -- Memory/register outputs
+           ]
+         -- Exclude common input patterns
+         && not (any (`Text.isInfixOf` lowerName)
+           [ "input", "in_", "_in", "read", "enable", "reset", "clk", "clock"
+           , "addr", "address", "sel", "select", "control", "mode"
+           ])
+         )
+         -- Also check for _o suffix (common convention: signal_o = output)
+         || Text.isSuffixOf "_o" lowerName
+         || Text.isSuffixOf "_out" lowerName
 
 -- | Extract base signal name from assignment target (ADC-022)
 targetToSignalName :: Expression -> Maybe Identifier
@@ -219,7 +232,7 @@ collectReadsFromSeqStatement (CaseStatement expr whenClauses _) =
   ) whenClauses
 collectReadsFromSeqStatement (LoopStatement _ range body _) =
   (case range of
-     Just (start, end) -> extractSignalsFromExpr start ++ extractSignalsFromExpr end
+     Just (start, end, _dir) -> extractSignalsFromExpr start ++ extractSignalsFromExpr end
      Nothing -> []) ++
   concatMap collectReadsFromSeqStatement body
 collectReadsFromSeqStatement (WaitStatement mexpr _) =
@@ -251,3 +264,11 @@ extractSignalsFromExpr (AttributeExpr base _ params) =
 -- Extract signals from slice expressions: signal(7 downto 0)
 extractSignalsFromExpr (SliceExpr base high low _) =
   extractSignalsFromExpr base ++ extractSignalsFromExpr high ++ extractSignalsFromExpr low
+-- ADC-IMPLEMENTS: spellcraft-adc-026
+-- Extract signals from selected names: record.field
+extractSignalsFromExpr (SelectedName base _) =
+  extractSignalsFromExpr base
+-- ADC-IMPLEMENTS: spellcraft-adc-027
+-- Extract signals from conditional expressions: value when cond else default
+extractSignalsFromExpr (ConditionalExpr value cond elseExpr) =
+  extractSignalsFromExpr value ++ extractSignalsFromExpr cond ++ extractSignalsFromExpr elseExpr

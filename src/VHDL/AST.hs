@@ -168,7 +168,7 @@ data Statement
       }
   | LoopStatement
       { stmtLoopVar :: Maybe Identifier
-      , stmtLoopRange :: Maybe (Expression, Expression)
+      , stmtLoopRange :: Maybe (Expression, Expression, SliceDirection)  -- ADC-027: Added direction for downto support
       , stmtLoopBody :: [Statement]
       , stmtLocation :: SourceLocation
       }
@@ -199,11 +199,12 @@ instance ToJSON Architecture
 -- | Component instantiation with generic and port maps
 -- ADC-IMPLEMENTS: spellcraft-adc-020
 -- ADC-IMPLEMENTS: spellcraft-adc-021
+-- ADC-IMPLEMENTS: spellcraft-adc-027
 data ComponentInst = ComponentInst
   { compInstName :: Identifier
   , compComponentName :: Identifier
   , compGenericMap :: [(Identifier, Expression)]  -- Changed from Value to Expression (ADC-020)
-  , compPortMap :: [(Identifier, Expression)]      -- Changed from SignalName to Expression (ADC-021)
+  , compPortMap :: [(Expression, Expression)]     -- ADC-027: Changed from Identifier to Expression to support indexed formals (a(0) => sig)
   , compLocation :: SourceLocation
   } deriving (Show, Eq, Generic)
 
@@ -246,6 +247,10 @@ data Expression
   -- ADC-IMPLEMENTS: spellcraft-adc-026
   -- Selected name (record field access): signal.field, record.field1.field2
   | SelectedName Expression Identifier
+  -- ADC-IMPLEMENTS: spellcraft-adc-027
+  -- Conditional expression: value when condition else default
+  -- Used in concurrent conditional signal assignments
+  | ConditionalExpr Expression Expression Expression  -- value, condition, else_value
   deriving (Show, Eq, Generic)
 
 instance ToJSON Expression
@@ -278,12 +283,14 @@ data SliceDirection
 instance ToJSON SliceDirection
 
 -- | Literal values in expressions
+-- ADC-IMPLEMENTS: spellcraft-adc-008
 data Literal
   = IntLiteral Integer
   | RealLiteral Double
   | StringLiteral Text
   | CharLiteral Char
   | BitLiteral Bool
+  | BasedLiteral Text  -- VHDL based literals: x"BEEF", b"1010", o"777"
   deriving (Show, Eq, Generic)
 
 instance ToJSON Literal
