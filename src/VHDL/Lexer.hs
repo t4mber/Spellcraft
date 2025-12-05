@@ -12,6 +12,7 @@ module VHDL.Lexer
   , integer
   , double
   , stringLiteral
+  , basedLiteral
   , parens
   , semi
   , colon
@@ -93,6 +94,17 @@ stringLiteral = lexeme $ do
   s <- many (noneOf ['\"'])
   _ <- char '"'
   pure (T.pack s)
+
+-- | Parse a VHDL based string literal (hex, binary, octal)
+-- ADC-IMPLEMENTS: spellcraft-adc-008
+-- Examples: x"BEEF", X"CAFE", b"1010", o"777"
+basedLiteral :: Parser Text
+basedLiteral = lexeme $ do
+  base <- oneOf ['x', 'X', 'b', 'B', 'o', 'O']
+  _ <- char '"'
+  digits <- many (noneOf ['\"'])
+  _ <- char '"'
+  pure $ T.pack (base : '"' : digits ++ "\"")
 
 -- | Parse within parentheses
 parens :: Parser a -> Parser a

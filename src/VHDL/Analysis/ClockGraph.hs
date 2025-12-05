@@ -191,10 +191,11 @@ extractEdges lib comp = do
 -- | Build edges showing signal flow through component
 -- Fixed: Use port direction instead of name heuristics
 -- ADC-IMPLEMENTS: spellcraft-adc-021
+-- ADC-IMPLEMENTS: spellcraft-adc-027
 -- Port map now contains expressions, extract signal identifiers
 buildComponentEdges :: ComponentInst -> ComponentSpec -> [ClockEdge]
 buildComponentEdges comp spec =
-  let portMap = Map.fromList (compPortMap comp)
+  let portAssocs = compPortMap comp
       -- Find clock input ports (Input direction + clock-like name)
       clockInputs = [ p | p <- compSpecPorts spec
                         , portConstraintDirection p == Input
@@ -211,8 +212,26 @@ buildComponentEdges comp spec =
        }
      | inp <- clockInputs
      , out <- clockOutputs
-     , Just inputExpr <- [Map.lookup (portConstraintName inp) portMap]
-     , Just outputExpr <- [Map.lookup (portConstraintName out) portMap]
+     , Just inputExpr <- [lookupPortByName (portConstraintName inp) portAssocs]
+     , Just outputExpr <- [lookupPortByName (portConstraintName out) portAssocs]
      , Just inputSig <- [exprToSignalName inputExpr]
      , Just outputSig <- [exprToSignalName outputExpr]
      ]
+
+-- | Look up an expression in port associations by formal name
+-- ADC-IMPLEMENTS: spellcraft-adc-027
+-- Handles both simple identifiers and indexed formals (a(0))
+lookupPortByName :: Identifier -> [(Expression, Expression)] -> Maybe Expression
+lookupPortByName name portAssocs =
+  case [ actual | (formal, actual) <- portAssocs
+                , formalMatchesName name formal ] of
+    (expr:_) -> Just expr
+    [] -> Nothing
+
+-- | Check if a formal expression matches a port name
+-- ADC-IMPLEMENTS: spellcraft-adc-027
+formalMatchesName :: Identifier -> Expression -> Bool
+formalMatchesName name (IdentifierExpr formalName) = formalName == name
+formalMatchesName name (IndexedName baseExpr _) = formalMatchesName name baseExpr
+formalMatchesName name (SliceExpr baseExpr _ _ _) = formalMatchesName name baseExpr
+formalMatchesName _ _ = False
