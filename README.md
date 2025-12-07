@@ -19,21 +19,22 @@ A hardware design verification tool that helps you _craft_ your hardware designs
 ## Features
 
 - **Signal Usage Analysis**: Detect undriven and unused signals in VHDL designs
-- **Component Output Tracking**: Heuristic-based detection of component output ports
-- **Process Body Parsing**: Full support for if/elsif/else, signal assignments, and control flow
-- **Work Library Support**: Complete VHDL library and use clause parsing
-- **Clear Error Messages**: Precise file:line:column error reporting with source location tracking
-- **Comprehensive Testing**: 100% parse success on LZX corpus (23 files)
+- **Latch Inference Detection**: Find incomplete assignments that synthesize to latches
+- **Unbounded Counter Detection**: Identify counters without overflow protection
+- **Warning vs Error Severity**: Configurable with `--strict` and `--suppress-warnings`
+- **Generate Statement Parsing**: For-generate and if-generate support
+- **Clear Error Messages**: Precise file:line:column error reporting with color coding
+- **Comprehensive Testing**: 100% parse success on LZX corpus, 3/3 Kaos Elf levels
 - **Fast Performance**: Sub-second analysis (~0.2s per file)
 
 ## Status
 
-**Version:** 0.5.0
+**Version:** 0.6.0
 **Release Date:** 2025-12-04
 **Build:** Passing
-**Tests:** 100% parse success (23/23 LZX files), 39/39 unit tests
-**Features:** VHDL parsing, signal usage analysis, multi-signal declarations, based literals
-**Quality:** 100% parse rate on LZX corpus, 0 crashes
+**Tests:** 100% parse success, 39/39 unit tests, 3/3 Kaos Elf levels detected
+**Features:** VHDL parsing, violation detection, warning infrastructure, generate statements
+**Quality:** 100% parse rate, latch inference + unbounded counter detection
 
 ## Installation
 
@@ -118,16 +119,17 @@ Spellcraft includes comprehensive test infrastructure:
 - **Parser Fixtures**: 6 unit test files for parser development
 - **Automated Testing**: `python3 tests/corpus_test.py`
 
-### Test Results (v0.5.0)
+### Test Results (v0.6.0)
 
-| Corpus | Files | Parse Success |
-|--------|-------|---------------|
-| LZX Lumarian | 13 | 100% |
-| LZX Mirrorbound | 10 | 100% |
-| Codeglow | 4 | 100% |
-| **Overall** | **27** | **100%** |
+| Corpus | Files | Parse | Detection |
+|--------|-------|-------|-----------|
+| LZX Lumarian | 13 | 100% | - |
+| LZX Mirrorbound | 10 | 100% | - |
+| Codeglow | 4 | 100% | - |
+| Kaos Elf | 3 | 100% | 3/3 levels |
+| **Overall** | **30** | **100%** | **100%** |
 
-See `RELEASE-v0.5.0.md` for full release notes.
+See `RELEASE-v0.6.0.md` for full release notes.
 
 ## Project Structure
 

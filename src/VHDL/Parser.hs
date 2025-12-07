@@ -4,6 +4,7 @@
 -- ADC-IMPLEMENTS: spellcraft-adc-001
 -- ADC-IMPLEMENTS: spellcraft-adc-008
 -- ADC-IMPLEMENTS: spellcraft-adc-012
+-- ADC-IMPLEMENTS: spellcraft-adc-028
 module VHDL.Parser
   ( -- * Parsing
     parseVHDLFile
@@ -344,13 +345,69 @@ parseConditionalExpr = do
     Nothing -> pure firstExpr  -- Simple assignment, no condition
     Just (cond, elseExpr) -> pure $ ConditionalExpr firstExpr cond elseExpr
 
--- | Parse architecture-level statement (process, concurrent, or component)
+-- | Parse architecture-level statement (process, concurrent, component, or generate)
+-- ADC-IMPLEMENTS: spellcraft-adc-028
 archStatement :: Parser ArchStatement
 archStatement = choice
   [ try processStmt
+  , try generateStmt  -- ADC-028: Generate statements
   , try (ComponentInstStmt <$> componentInst)
   , try concurrentAssignment
   ]
+
+-- | Parse generate statement (for-generate or if-generate)
+-- ADC-IMPLEMENTS: spellcraft-adc-028
+-- IEEE 1076-2008 Section 11.8
+-- Patterns:
+--   gen_label: for i in 0 to N-1 generate ... end generate [gen_label];
+--   gen_label: if CONDITION generate ... end generate [gen_label];
+generateStmt :: Parser ArchStatement
+generateStmt = do
+  sc  -- Consume leading whitespace/comments
+  pos <- getSourcePos
+  -- Generate statements require a label
+  label <- identifier
+  void colon
+  -- Parse either for-generate or if-generate scheme
+  scheme <- choice
+    [ try parseForGenerateScheme
+    , parseIfGenerateScheme
+    ]
+  void $ keyword "generate"
+  -- Parse nested architecture statements (recursive)
+  statements <- many (try archStatement)
+  void $ keyword "end"
+  void $ keyword "generate"
+  -- Optional closing label
+  void $ optional (try identifier)
+  void semi
+  pure $ GenerateStmt GenerateStatement
+    { genLabel = label
+    , genScheme = scheme
+    , genStatements = statements
+    , genLocation = sourcePosToLocation pos
+    }
+
+-- | Parse for-generate scheme: for i in start to/downto end
+-- ADC-IMPLEMENTS: spellcraft-adc-028
+parseForGenerateScheme :: Parser GenerateScheme
+parseForGenerateScheme = do
+  void $ keyword "for"
+  loopVar <- identifier
+  void $ keyword "in"
+  startExpr <- parseExpression
+  -- Parse direction (to or downto)
+  dir <- try (keyword "downto" >> pure DownTo) <|> (keyword "to" >> pure To)
+  endExpr <- parseExpression
+  pure $ ForGenerate loopVar startExpr endExpr dir
+
+-- | Parse if-generate scheme: if condition
+-- ADC-IMPLEMENTS: spellcraft-adc-028
+parseIfGenerateScheme :: Parser GenerateScheme
+parseIfGenerateScheme = do
+  void $ keyword "if"
+  condition <- parseExpression
+  pure $ IfGenerate condition
 
 -- | Skip a declaration that we don't parse (constant, type, etc.)
 -- ADC-IMPLEMENTS: spellcraft-adc-025

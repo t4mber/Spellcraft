@@ -5,6 +5,50 @@ All notable changes to the Spellcraft will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.6.0] - 2025-12-04
+
+### Added - Violation Detection & Warning Infrastructure 🎯
+
+#### Control Flow Analysis (ADC-012 Priority 2)
+- **Added:** Latch inference detection for incomplete assignments
+- **Added:** CFG construction for process statements
+- **Added:** Path coverage analysis
+- **Impact:** Level 2 Kaos Elf violations now detected
+- **Files:** `src/VHDL/Analysis/ControlFlow.hs`
+
+#### Arithmetic Bounds Checking (ADC-012 Priority 3)
+- **Added:** Unbounded counter detection
+- **Added:** Counter pattern recognition (`signal <= signal + N`)
+- **Impact:** Level 3 Kaos Elf violations now detected
+- **Files:** `src/VHDL/Analysis/ArithmeticBounds.hs`
+
+#### Warning vs Error Infrastructure (ADC-014)
+- **Added:** `Severity` type (Error, Warning, Info)
+- **Added:** Automatic violation classification by severity
+- **Added:** `--strict` / `--warnings-as-errors` flag
+- **Added:** `--suppress-warnings` flag
+- **Changed:** Exit code 0 for warnings-only (unless --strict)
+- **Changed:** Color coding: red for errors, yellow for warnings
+
+#### Generate Statement Parsing (ADC-028)
+- **Added:** For-generate statements (`for i in 0 to N generate`)
+- **Added:** If-generate statements (`if CONDITION generate`)
+- **Added:** `GenerateStatement` and `GenerateScheme` AST types
+- **Files:** `src/VHDL/Parser.hs`, `src/VHDL/AST.hs`
+
+### Testing
+
+**Kaos Elf Detection:**
+- Level 1 (Undriven signal): ✅ Detected
+- Level 2 (Latch inference): ✅ Detected
+- Level 3 (Unbounded counter): ✅ Detected
+
+**Test Suite:**
+- All 39 tests passing
+- 100% LZX parse rate maintained
+
+---
+
 ## [0.5.0] - 2025-12-04
 
 ### Added - Parser Enhancements for 100% LZX Parse Rate 🎯

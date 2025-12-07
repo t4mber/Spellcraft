@@ -77,6 +77,7 @@ reservedKeywords =
   , "case", "when", "others"
   , "loop", "for", "while"
   , "process", "wait", "null"
+  , "generate"  -- ADC-028: Generate statements
   ]
 
 -- | Parse an integer literal (supporting negative numbers)

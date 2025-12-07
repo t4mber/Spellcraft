@@ -2,7 +2,7 @@
 title: "ADC-015: Architecture Body Statement Parsing"
 id: spellcraft-adc-015
 version: 1.0.0
-status: active
+status: complete
 priority: critical
 created: 2025-11-10
 ---

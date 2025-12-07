@@ -125,6 +125,12 @@ collectFromArchStatement (ComponentInstStmt inst) =
                     , Just targetSignal <- [targetToSignalName expr]
                     ]
   in trace ("collectFromArchStatement (ComponentInstStmt): found " ++ show (length assignments) ++ " output port assignments") assignments
+-- ADC-IMPLEMENTS: spellcraft-adc-028
+-- Handle generate statements by recursively collecting from nested statements
+collectFromArchStatement (GenerateStmt genStmt) =
+  let nestedStmts = genStatements genStmt
+      assignments = concatMap collectFromArchStatement nestedStmts
+  in trace ("collectFromArchStatement (GenerateStmt): found " ++ show (length assignments) ++ " nested assignments") assignments
 
 -- | Extract identifier from a formal expression
 -- ADC-IMPLEMENTS: spellcraft-adc-027
@@ -163,10 +169,15 @@ isLikelyOutputPort (formalExpr, _) =
          || Text.isSuffixOf "_out" lowerName
 
 -- | Extract base signal name from assignment target (ADC-022)
+-- ADC-IMPLEMENTS: spellcraft-adc-012
+-- NOTE: VHDL array indexing (signal(idx)) may be parsed as FunctionCall
+-- because the syntax is ambiguous. We handle both cases here.
 targetToSignalName :: Expression -> Maybe Identifier
 targetToSignalName (IdentifierExpr name) = Just name
 targetToSignalName (IndexedName base _) = targetToSignalName base  -- Recurse to get base signal
 targetToSignalName (SliceExpr base _ _ _) = targetToSignalName base
+-- FunctionCall with identifier name can be array indexing: sig(0) <= value
+targetToSignalName (FunctionCall name _) = Just name
 targetToSignalName _ = Nothing  -- Complex expressions
 
 -- | Collect assignments from a sequential statement
@@ -211,6 +222,10 @@ collectReadsFromArchStatement (ComponentInstStmt comp) =
   -- ADC-IMPLEMENTS: spellcraft-adc-021
   -- Port map connections are reads (expressions, not just identifiers)
   concatMap (extractSignalsFromExpr . snd) (compPortMap comp)
+-- ADC-IMPLEMENTS: spellcraft-adc-028
+-- Handle generate statements by recursively collecting reads from nested statements
+collectReadsFromArchStatement (GenerateStmt genStmt) =
+  concatMap collectReadsFromArchStatement (genStatements genStmt)
 
 -- | Collect reads from a sequential statement
 -- Enhanced: spellcraft-adc-013 Section: SignalUsage Updates
@@ -250,8 +265,11 @@ extractSignalsFromExpr (BinaryExpr _ left right) =
   extractSignalsFromExpr left ++ extractSignalsFromExpr right
 extractSignalsFromExpr (UnaryExpr _ expr) =
   extractSignalsFromExpr expr
-extractSignalsFromExpr (FunctionCall _ args) =
-  concatMap extractSignalsFromExpr args
+-- ADC-IMPLEMENTS: spellcraft-adc-012
+-- FunctionCall can be array indexing: arr(0) parses as FunctionCall "arr" [IntLiteral 0]
+-- Include the "function" name as a potential signal read
+extractSignalsFromExpr (FunctionCall name args) =
+  [name] ++ concatMap extractSignalsFromExpr args
 extractSignalsFromExpr (IndexedName base idx) =
   extractSignalsFromExpr base ++ extractSignalsFromExpr idx
 extractSignalsFromExpr (Aggregate exprs) =

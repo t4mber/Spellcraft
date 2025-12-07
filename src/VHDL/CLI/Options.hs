@@ -1,4 +1,5 @@
 -- ADC-IMPLEMENTS: spellcraft-adc-005
+-- ADC-IMPLEMENTS: spellcraft-adc-014 Section: CLI Flags
 -- ADC-IMPLEMENTS: <videomancer-integration-01>
 module VHDL.CLI.Options
   ( -- * CLI Options
@@ -23,13 +24,15 @@ data AnalysisMode
 
 -- | CLI options
 -- Contract: spellcraft-adc-005 Section: Interface
+-- ADC-IMPLEMENTS: spellcraft-adc-014 Section: CLI Flags
 data CliOptions = CliOptions
   { optInputFiles :: [FilePath]
   , optVerbose :: Bool
   , optOutputFormat :: OutputFormat
   , optThreshold :: Int
   , optComponentLibrary :: Maybe FilePath
-  , optStrictMode :: Bool
+  , optStrictMode :: Bool           -- ^ Treat warnings as errors (--strict or --warnings-as-errors)
+  , optSuppressWarnings :: Bool     -- ^ Hide warning messages (--suppress-warnings)
   , optAnalysisMode :: AnalysisMode
   } deriving (Show, Eq)
 
@@ -71,7 +74,10 @@ cliParser = CliOptions
      <> short 'l'
      <> metavar "FILE"
      <> help "Component library file (future feature)" ))
-  <*> switch (long "strict" <> help "Treat warnings as errors")
+  -- ADC-IMPLEMENTS: spellcraft-adc-014 Section: CLI Flags
+  <*> (switch (long "strict" <> help "Treat warnings as errors")
+       <|> switch (long "warnings-as-errors" <> help "Treat warnings as errors (alias for --strict)"))
+  <*> switch (long "suppress-warnings" <> help "Hide warning messages from output")
   <*> analysisModeParser
 
 -- | Parse analysis mode (standard or videomancer)
