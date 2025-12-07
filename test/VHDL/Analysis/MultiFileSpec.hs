@@ -224,8 +224,8 @@ spec = do
 
   describe "Integration with real VHDL files" $ do
     it "builds context from KAOS Level 6 component files" $ do
-      resultA <- parseVHDLFile "contrib/lzx-kaos-levels/multi-file/level6_component_a.vhd"
-      resultB <- parseVHDLFile "contrib/lzx-kaos-levels/multi-file/level6_component_b.vhd"
+      resultA <- parseVHDLFile "test/fixtures/kaos-elf/multi-file/level6_component_a.vhd"
+      resultB <- parseVHDLFile "test/fixtures/kaos-elf/multi-file/level6_component_b.vhd"
       case (resultA, resultB) of
         (Right designA, Right designB) -> do
           let ctx = buildContext [designA, designB]
