@@ -3,6 +3,7 @@
 
 -- ADC-IMPLEMENTS: spellcraft-adc-005
 -- ADC-IMPLEMENTS: spellcraft-adc-014 Section: Report Updates
+-- ADC-IMPLEMENTS: spellcraft-adc-029
 module VHDL.CLI.Report
   ( -- * Reports
     AnalysisReport(..)
@@ -36,10 +37,11 @@ import VHDL.Analysis.ClockGraph (buildClockGraph, ClockGraph(..), cgNodes, cgEdg
 import VHDL.Analysis.Propagation (propagateFrequencies)
 import VHDL.Analysis.Violation (detectFrequencyViolations)
 import VHDL.Analysis.ClashFile (analyzeClashFile, ClashAnalysisResult(..), ClashViolation(..), clashViolationToConstraint)
-import VHDL.Analysis.SignalUsage (analyzeSignalUsage, SignalViolation(..), violationSignal, violationLocation, violationType)
+import VHDL.Analysis.SignalUsage (analyzeSignalUsageWithContext, SignalViolation(..), violationSignal, violationLocation, violationType)
+import VHDL.Analysis.MultiFile (buildContext)
 import VHDL.Analysis.ControlFlow (analyzeControlFlow, ControlFlowViolation(..), latchSignal, latchLocation, latchDescription)
 import VHDL.Analysis.ArithmeticBounds (checkArithmeticBounds, ArithmeticViolation(..))
-import VHDL.AST (VHDLDesign, designArchitectures)
+import VHDL.AST (VHDLDesign, designArchitectures, designEntities)
 import VHDL.SourceLocation (mkSourceLocation, SourceLocation(..))
 import System.FilePath (takeExtension)
 import qualified Data.Map.Strict as Map
@@ -221,13 +223,22 @@ printWarning fmt warning = do
 
 -- | Analyze designs for constraint violations
 -- Contract: spellcraft-adc-005 Section: Interface
+-- ADC-IMPLEMENTS: spellcraft-adc-029
+-- Now builds multi-file context from all designs for cross-file resolution
 analyzeDesigns :: [VHDLDesign] -> ComponentLibrary -> [ConstraintViolation]
-analyzeDesigns designs lib = concatMap analyzeDesign designs
+analyzeDesigns designs lib =
+  -- ADC-029: Build multi-file analysis context from all designs
+  let ctx = buildContext designs
+      numEntities = length $ concatMap designEntities designs
+  in trace ("\n=== Multi-File Context Built ===" ++
+            "\nFiles: " ++ show (length designs) ++
+            "\nEntities: " ++ show numEntities) $
+  concatMap (analyzeDesign ctx) designs
   where
-    analyzeDesign design =
+    analyzeDesign ctx design =
       trace ("\n=== Starting Design Analysis ===") $
-      -- Signal usage analysis (ADC-012 Priority 1)
-      let signalViolations = concatMap analyzeSignalUsage (designArchitectures design)
+      -- Signal usage analysis with multi-file context (ADC-012 Priority 1, ADC-029)
+      let signalViolations = concatMap (analyzeSignalUsageWithContext ctx) (designArchitectures design)
           signalConstraints = map signalViolationToConstraint signalViolations
           -- Control flow analysis (ADC-012 Priority 2)
           controlViolations = concatMap analyzeControlFlow (designArchitectures design)

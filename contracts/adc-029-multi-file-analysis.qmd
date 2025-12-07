@@ -1,0 +1,197 @@
+---
+title: "ADC-029: Multi-File Analysis Context"
+version: "1.0.0"
+status: "Draft"
+priority: "P1"
+created: "2024-12-06"
+---
+
+# ADC-029: Multi-File Analysis Context
+
+## Purpose
+
+Enable Spellcraft to analyze multiple VHDL files together, building a shared context that allows resolution of external entity references. This eliminates false positive "undriven signal" violations for signals driven by component instantiations when the component's entity is available in another file.
+
+## Problem Statement
+
+When analyzing files like `lumarian.vhd` that reference external entities (components defined in other files), Spellcraft reports false positives because it cannot resolve those external references.
+
+Example from lumarian.vhd:
+```vhdl
+architecture rtl of lumarian is
+  -- Uses external components
+begin
+  y_contrast_inst : entity work.contrast_u
+    port map (
+      result => y_contrast_out,  -- Output port drives signal
+      valid  => y_contrast_valid -- Output port drives signal
+    );
+end architecture;
+```
+
+Without multi-file context, signals `y_contrast_out` and `y_contrast_valid` are incorrectly flagged as "undriven" because we don't know they're driven by component outputs.
+
+## Scope
+
+### In Scope
+- Build analysis context from multiple parsed VHDL files
+- Track entities, architectures, and their port declarations across files
+- Resolve component instantiation port directions using entity definitions
+- Update signal usage analysis to consult cross-file context
+- Maintain backward compatibility with single-file analysis
+
+### Out of Scope
+- Cross-library resolution (only `work` library supported initially)
+- Package body analysis
+- Configuration analysis
+- Incremental/cached context building
+
+## Interface
+
+### AnalysisContext Type
+
+```haskell
+-- ADC-IMPLEMENTS: adc-029
+-- Multi-file analysis context for resolving cross-file references
+data AnalysisContext = AnalysisContext
+  { ctxEntities :: Map Identifier Entity
+    -- ^ All known entities indexed by name
+  , ctxArchitectures :: Map (Identifier, Identifier) Architecture
+    -- ^ Architectures indexed by (archName, entityName)
+  , ctxDesigns :: [VHDLDesign]
+    -- ^ Original parsed designs for reference
+  , ctxSourceFiles :: [FilePath]
+    -- ^ Source files included in context
+  } deriving (Show, Eq)
+```
+
+### Context Building
+
+```haskell
+-- | Build analysis context from multiple parsed designs
+-- ADC-IMPLEMENTS: adc-029
+buildContext :: [VHDLDesign] -> AnalysisContext
+
+-- | Empty context for single-file analysis
+emptyContext :: AnalysisContext
+
+-- | Merge two contexts
+mergeContexts :: AnalysisContext -> AnalysisContext -> AnalysisContext
+```
+
+### Entity/Port Resolution
+
+```haskell
+-- | Look up entity by name in context
+-- Handles both bare names ("contrast_u") and qualified names ("work.contrast_u")
+lookupEntity :: AnalysisContext -> Identifier -> Maybe Entity
+
+-- | Get port direction for a given entity and port name
+getPortDirection :: AnalysisContext -> Identifier -> Identifier -> Maybe PortDirection
+
+-- | Check if a port is an output port
+isOutputPort :: AnalysisContext -> Identifier -> Identifier -> Bool
+```
+
+### Signal Usage Analysis Updates
+
+```haskell
+-- | Analyze signal usage with multi-file context
+-- ADC-IMPLEMENTS: adc-029
+analyzeSignalUsageWithContext :: AnalysisContext -> Architecture -> [SignalViolation]
+
+-- | Check if a signal is driven by a known component output
+isComponentOutputDriven :: AnalysisContext -> ComponentInst -> Identifier -> Bool
+```
+
+## Dependencies
+
+- **adc-001**: VHDL Parser (provides VHDLDesign, Entity, Architecture types)
+- **adc-012**: Signal Usage Analysis (extended to use context)
+- **adc-005**: CLI Reporting (needs to aggregate multiple file results)
+
+## Implementation
+
+### Phase 1: Context Building
+
+1. Parse all input VHDL files
+2. Build `AnalysisContext` from all successful parses
+3. Index entities by name (strip `work.` prefix for matching)
+
+### Phase 2: Signal Usage Update
+
+1. When checking component instantiation assignments:
+   - Look up the component's entity in context
+   - Get port direction from entity definition
+   - Only mark signal as "driven" if port is actually `out` or `inout`
+2. Fall back to heuristic for unknown entities
+
+### Phase 3: Report Integration
+
+1. Update `runAnalysis` to build context from all designs
+2. Pass context to signal usage analysis
+3. Aggregate violations across all files
+
+## Parity
+
+### Source Files
+```
+src/VHDL/Analysis/MultiFile.hs    -- New: context building
+src/VHDL/Analysis/SignalUsage.hs  -- Updated: context-aware analysis
+src/VHDL/CLI/Report.hs            -- Updated: multi-file orchestration
+src/VHDL/AST.hs                   -- Updated: AnalysisContext type
+```
+
+### Test Files
+```
+test/VHDL/Analysis/MultiFileSpec.hs  -- New: context building tests
+```
+
+## Success Criteria
+
+1. **Reduced False Positives**: `lumarian.vhd` analyzed with sibling files should report fewer "undriven" violations for signals driven by known component outputs
+2. **Backward Compatibility**: Single-file analysis produces identical results to before
+3. **Entity Resolution**: Can resolve `entity work.contrast_u` to `contrast_u` entity from `contrast.vhd`
+4. **Port Direction Detection**: Correctly identifies `result` and `valid` as output ports from entity definition
+5. **All Tests Pass**: Existing test suite remains green
+
+## Test Cases
+
+### TC-029-1: Entity Resolution
+```haskell
+-- Given: contrast_u entity in context
+-- When: lookupEntity ctx "work.contrast_u"
+-- Then: Returns Just (Entity "contrast_u" ...)
+```
+
+### TC-029-2: Port Direction
+```haskell
+-- Given: contrast_u entity with "result : out unsigned"
+-- When: getPortDirection ctx "contrast_u" "result"
+-- Then: Returns Just Output
+```
+
+### TC-029-3: Component Output Detection
+```haskell
+-- Given: context with contrast_u entity
+-- And: component instantiation mapping result => y_contrast_out
+-- When: isComponentOutputDriven ctx inst "y_contrast_out"
+-- Then: Returns True
+```
+
+### TC-029-4: Multi-File Analysis
+```haskell
+-- Given: lumarian.vhd + contrast.vhd + other component files
+-- When: analyze all files together
+-- Then: y_contrast_out not flagged as undriven
+-- And: passthru_y still flagged (genuinely undriven)
+```
+
+## Acceptance Criteria
+
+- [ ] `AnalysisContext` type defined in AST.hs
+- [ ] `MultiFile.hs` module implements context building
+- [ ] `SignalUsage.hs` accepts optional context parameter
+- [ ] `Report.hs` builds context when multiple files provided
+- [ ] `stack exec spellcraft -- contrib/lzx/lumarian/*.vhd` produces fewer false positives
+- [ ] `stack test` passes all existing and new tests

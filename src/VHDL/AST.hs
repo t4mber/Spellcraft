@@ -4,9 +4,13 @@
 -- ADC-IMPLEMENTS: spellcraft-adc-008
 -- ADC-IMPLEMENTS: spellcraft-adc-012
 -- ADC-IMPLEMENTS: spellcraft-adc-028
+-- ADC-IMPLEMENTS: spellcraft-adc-029
 module VHDL.AST
   ( -- * Design
     VHDLDesign(..)
+    -- * Multi-File Analysis Context (ADC-029)
+  , AnalysisContext(..)
+  , emptyContext
     -- * Library and Use Clauses
   , LibraryDeclaration(..)
   , UseClause(..)
@@ -38,6 +42,8 @@ module VHDL.AST
   ) where
 
 import Data.Aeson (ToJSON)
+import Data.Map.Strict (Map)
+import qualified Data.Map.Strict as Map
 import Data.Text (Text)
 import GHC.Generics (Generic)
 import VHDL.SourceLocation (SourceLocation)
@@ -327,3 +333,34 @@ data Literal
   deriving (Show, Eq, Generic)
 
 instance ToJSON Literal
+
+-- =============================================================================
+-- ADC-029: Multi-File Analysis Context
+-- =============================================================================
+
+-- | Multi-file analysis context for resolving cross-file references
+-- ADC-IMPLEMENTS: spellcraft-adc-029
+--
+-- When analyzing multiple VHDL files together, this context provides
+-- information about entities and architectures defined in other files,
+-- allowing signal usage analysis to correctly identify component outputs.
+data AnalysisContext = AnalysisContext
+  { ctxEntities :: Map Identifier Entity
+    -- ^ All known entities indexed by name (without library prefix)
+  , ctxArchitectures :: Map (Identifier, Identifier) Architecture
+    -- ^ Architectures indexed by (archName, entityName)
+  , ctxDesigns :: [VHDLDesign]
+    -- ^ Original parsed designs for reference
+  , ctxSourceFiles :: [FilePath]
+    -- ^ Source files included in context
+  } deriving (Show, Eq)
+
+-- | Empty context for single-file analysis or as starting point
+-- ADC-IMPLEMENTS: spellcraft-adc-029
+emptyContext :: AnalysisContext
+emptyContext = AnalysisContext
+  { ctxEntities = Map.empty
+  , ctxArchitectures = Map.empty
+  , ctxDesigns = []
+  , ctxSourceFiles = []
+  }
