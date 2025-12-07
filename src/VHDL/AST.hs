@@ -3,6 +3,7 @@
 -- ADC-IMPLEMENTS: spellcraft-adc-001
 -- ADC-IMPLEMENTS: spellcraft-adc-008
 -- ADC-IMPLEMENTS: spellcraft-adc-012
+-- ADC-IMPLEMENTS: spellcraft-adc-028
 module VHDL.AST
   ( -- * Design
     VHDLDesign(..)
@@ -20,6 +21,9 @@ module VHDL.AST
   , ArchStatement(..)
   , Statement(..)
   , ComponentInst(..)
+    -- * Generate Statements (ADC-028)
+  , GenerateStatement(..)
+  , GenerateScheme(..)
     -- * Expressions
   , Expression(..)
   , BinaryOp(..)
@@ -122,6 +126,7 @@ instance ToJSON SignalDecl
 -- | Architecture-level statement (processes, concurrent, component instantiations)
 -- Contract: spellcraft-adc-012 Section: Signal Usage Tracker
 -- Enhanced: spellcraft-adc-022 Section: Indexed Assignments
+-- Enhanced: spellcraft-adc-028 Section: Generate Statements
 data ArchStatement
   = ProcessStmt
       { procName :: Maybe Identifier
@@ -135,6 +140,8 @@ data ArchStatement
       , concLocation :: SourceLocation
       }
   | ComponentInstStmt ComponentInst
+  -- ADC-IMPLEMENTS: spellcraft-adc-028
+  | GenerateStmt GenerateStatement
   deriving (Show, Eq, Generic)
 
 instance ToJSON ArchStatement
@@ -209,6 +216,32 @@ data ComponentInst = ComponentInst
   } deriving (Show, Eq, Generic)
 
 instance ToJSON ComponentInst
+
+-- | Generate statement (for-generate and if-generate)
+-- ADC-IMPLEMENTS: spellcraft-adc-028
+-- IEEE 1076-2008 Section 11.8
+-- Patterns:
+--   gen_label: for i in 0 to N-1 generate ... end generate;
+--   gen_label: if CONDITION generate ... end generate;
+data GenerateStatement = GenerateStatement
+  { genLabel :: Identifier
+  , genScheme :: GenerateScheme
+  , genStatements :: [ArchStatement]
+  , genLocation :: SourceLocation
+  } deriving (Show, Eq, Generic)
+
+instance ToJSON GenerateStatement
+
+-- | Generate scheme (for-generate or if-generate)
+-- ADC-IMPLEMENTS: spellcraft-adc-028
+data GenerateScheme
+  = ForGenerate Identifier Expression Expression SliceDirection
+    -- ^ for i in start to/downto end
+  | IfGenerate Expression
+    -- ^ if condition
+  deriving (Show, Eq, Generic)
+
+instance ToJSON GenerateScheme
 
 -- | Type aliases
 type Identifier = Text

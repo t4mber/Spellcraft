@@ -125,6 +125,12 @@ collectFromArchStatement (ComponentInstStmt inst) =
                     , Just targetSignal <- [targetToSignalName expr]
                     ]
   in trace ("collectFromArchStatement (ComponentInstStmt): found " ++ show (length assignments) ++ " output port assignments") assignments
+-- ADC-IMPLEMENTS: spellcraft-adc-028
+-- Handle generate statements by recursively collecting from nested statements
+collectFromArchStatement (GenerateStmt genStmt) =
+  let nestedStmts = genStatements genStmt
+      assignments = concatMap collectFromArchStatement nestedStmts
+  in trace ("collectFromArchStatement (GenerateStmt): found " ++ show (length assignments) ++ " nested assignments") assignments
 
 -- | Extract identifier from a formal expression
 -- ADC-IMPLEMENTS: spellcraft-adc-027
@@ -216,6 +222,10 @@ collectReadsFromArchStatement (ComponentInstStmt comp) =
   -- ADC-IMPLEMENTS: spellcraft-adc-021
   -- Port map connections are reads (expressions, not just identifiers)
   concatMap (extractSignalsFromExpr . snd) (compPortMap comp)
+-- ADC-IMPLEMENTS: spellcraft-adc-028
+-- Handle generate statements by recursively collecting reads from nested statements
+collectReadsFromArchStatement (GenerateStmt genStmt) =
+  concatMap collectReadsFromArchStatement (genStatements genStmt)
 
 -- | Collect reads from a sequential statement
 -- Enhanced: spellcraft-adc-013 Section: SignalUsage Updates
