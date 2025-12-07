@@ -65,6 +65,8 @@ library
     VHDL.Analysis.Expression
     VHDL.Analysis.ClashFile
     VHDL.Analysis.SignalUsage
+    VHDL.Analysis.ControlFlow
+    VHDL.Analysis.ArithmeticBounds
     VHDL.CLI.Options
     VHDL.CLI.Format
     VHDL.CLI.Report

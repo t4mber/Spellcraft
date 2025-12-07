@@ -93,6 +93,18 @@ data ConstraintViolation
       , violationDescription :: Text
       , violationLocation :: SourceLocation
       }
+  -- ADC-IMPLEMENTS: spellcraft-adc-012 Section: Control Flow Analysis
+  | ControlFlowViolation
+      { violationSignalName :: Text
+      , violationDescription :: Text
+      , violationLocation :: SourceLocation
+      }
+  -- ADC-IMPLEMENTS: spellcraft-adc-012 Section: Arithmetic Bounds Checker
+  | ArithmeticBoundsViolation
+      { violationSignalName :: Text
+      , violationDescription :: Text
+      , violationLocation :: SourceLocation
+      }
   deriving (Show, Eq, Generic)
 
 instance ToJSON ConstraintViolation

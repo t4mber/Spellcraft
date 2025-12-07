@@ -58,6 +58,28 @@ formatViolation fmt (SignalUsageViolation sigName desc loc) =
     JSON -> T.pack $ printf "{\"type\":\"SignalUsageViolation\",\"signal\":\"%s\",\"description\":\"%s\"}"
       (T.unpack sigName) (T.unpack desc)
 
+-- | Format control flow violation (latch inference)
+-- ADC-IMPLEMENTS: spellcraft-adc-012 Section: Control Flow Analysis
+formatViolation fmt (ControlFlowViolation sigName desc loc) =
+  case fmt of
+    HumanReadable -> T.pack $ printf "%s: warning: Potential latch inference\n  %s\n  Signal: '%s'"
+      (T.unpack $ formatLocation loc) (T.unpack desc) (T.unpack sigName)
+    GCC -> T.pack $ printf "%s: warning: Latch inference: %s"
+      (T.unpack $ formatLocation loc) (T.unpack sigName)
+    JSON -> T.pack $ printf "{\"type\":\"ControlFlowViolation\",\"signal\":\"%s\",\"description\":\"%s\"}"
+      (T.unpack sigName) (T.unpack desc)
+
+-- | Format arithmetic bounds violation (overflow risk)
+-- ADC-IMPLEMENTS: spellcraft-adc-012 Section: Arithmetic Bounds Checker
+formatViolation fmt (ArithmeticBoundsViolation sigName desc loc) =
+  case fmt of
+    HumanReadable -> T.pack $ printf "%s: warning: Arithmetic bounds risk\n  %s\n  Signal: '%s'"
+      (T.unpack $ formatLocation loc) (T.unpack desc) (T.unpack sigName)
+    GCC -> T.pack $ printf "%s: warning: Overflow risk: %s"
+      (T.unpack $ formatLocation loc) (T.unpack sigName)
+    JSON -> T.pack $ printf "{\"type\":\"ArithmeticBoundsViolation\",\"signal\":\"%s\",\"description\":\"%s\"}"
+      (T.unpack sigName) (T.unpack desc)
+
 -- | Format complexity warning
 -- Contract: spellcraft-adc-005 Section: Interface
 formatComplexityWarning :: OutputFormat -> ComplexityWarning -> Text

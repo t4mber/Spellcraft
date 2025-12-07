@@ -36,6 +36,8 @@ import VHDL.Analysis.Propagation (propagateFrequencies)
 import VHDL.Analysis.Violation (detectFrequencyViolations)
 import VHDL.Analysis.ClashFile (analyzeClashFile, ClashAnalysisResult(..), ClashViolation(..), clashViolationToConstraint)
 import VHDL.Analysis.SignalUsage (analyzeSignalUsage, SignalViolation(..), violationSignal, violationLocation, violationType)
+import VHDL.Analysis.ControlFlow (analyzeControlFlow, ControlFlowViolation(..), latchSignal, latchLocation, latchDescription)
+import VHDL.Analysis.ArithmeticBounds (checkArithmeticBounds, ArithmeticViolation(..))
 import VHDL.AST (VHDLDesign, designArchitectures)
 import VHDL.SourceLocation (mkSourceLocation, SourceLocation(..))
 import System.FilePath (takeExtension)
@@ -171,14 +173,24 @@ analyzeDesigns designs lib = concatMap analyzeDesign designs
   where
     analyzeDesign design =
       trace ("\n=== Starting Design Analysis ===") $
-      -- Signal usage analysis (ADC-012)
+      -- Signal usage analysis (ADC-012 Priority 1)
       let signalViolations = concatMap analyzeSignalUsage (designArchitectures design)
           signalConstraints = map signalViolationToConstraint signalViolations
+          -- Control flow analysis (ADC-012 Priority 2)
+          controlViolations = concatMap analyzeControlFlow (designArchitectures design)
+          controlConstraints = map controlFlowViolationToConstraint controlViolations
+          -- Arithmetic bounds analysis (ADC-012 Priority 3)
+          arithmeticViolations = concatMap checkArithmeticBounds (designArchitectures design)
+          arithmeticConstraints = map arithmeticViolationToConstraint arithmeticViolations
+          -- All ADC-012 violations combined
+          allAdc012Constraints = signalConstraints ++ controlConstraints ++ arithmeticConstraints
       in trace ("\n=== Signal Usage Analysis ===" ++
-               "\nSignal violations: " ++ show (length signalViolations)) $
+               "\nSignal violations: " ++ show (length signalViolations) ++
+               "\nControl flow violations: " ++ show (length controlViolations) ++
+               "\nArithmetic violations: " ++ show (length arithmeticViolations)) $
       case buildClockGraph design lib of
         Left err ->
-          trace ("Graph building ERROR: " ++ show err) signalConstraints
+          trace ("Graph building ERROR: " ++ show err) allAdc012Constraints
         Right clockGraph ->
           let sourceInfo = unlines [show s | s <- cgSources clockGraph]
               edgeInfo = unlines [show e | e <- cgEdges clockGraph]
@@ -189,11 +201,11 @@ analyzeDesigns designs lib = concatMap analyzeDesign designs
                     "\nNodes before propagation:\n" ++ nodesBefore) $
           case propagateFrequencies clockGraph lib of
             Left err ->
-              trace ("Propagation error: " ++ show err) signalConstraints
+              trace ("Propagation error: " ++ show err) allAdc012Constraints
             Right propagatedGraph ->
               let nodesAfter = unlines [show (cnSignal n, cnFrequency n) | n <- Map.elems (cgNodes propagatedGraph)]
                   freqViolations = detectFrequencyViolations propagatedGraph lib
-                  allViolations = signalConstraints ++ freqViolations
+                  allViolations = allAdc012Constraints ++ freqViolations
               in trace ("\n=== After Propagation ===" ++
                        "\nNodes:\n" ++ nodesAfter ++
                        "\nViolations: " ++ show allViolations) allViolations
@@ -206,4 +218,30 @@ signalViolationToConstraint violation =
     { violationSignalName = violationSignal violation
     , violationDescription = violationType violation
     , violationLocation = VHDL.Analysis.SignalUsage.violationLocation violation
+    }
+
+-- | Convert control flow violation to constraint violation
+-- ADC-IMPLEMENTS: spellcraft-adc-012 Section: Control Flow Analysis
+controlFlowViolationToConstraint :: ControlFlowViolation -> ConstraintViolation
+controlFlowViolationToConstraint violation =
+  ControlFlowViolation
+    { violationSignalName = latchSignal violation
+    , violationDescription = latchDescription violation
+    , violationLocation = latchLocation violation
+    }
+
+-- | Convert arithmetic violation to constraint violation
+-- ADC-IMPLEMENTS: spellcraft-adc-012 Section: Arithmetic Bounds Checker
+arithmeticViolationToConstraint :: ArithmeticViolation -> ConstraintViolation
+arithmeticViolationToConstraint (UnboundedCounter sig loc desc) =
+  ArithmeticBoundsViolation
+    { violationSignalName = sig
+    , violationDescription = desc
+    , violationLocation = loc
+    }
+arithmeticViolationToConstraint (PotentialOverflow sig _ loc _ _ desc) =
+  ArithmeticBoundsViolation
+    { violationSignalName = sig
+    , violationDescription = desc
+    , violationLocation = loc
     }
