@@ -21,7 +21,6 @@ import Data.Set (Set)
 import qualified Data.Set as Set
 import Data.Text (Text)
 import qualified Data.Text as Text
-import Debug.Trace (trace)
 import VHDL.AST
 import VHDL.SourceLocation (SourceLocation)
 
@@ -116,16 +115,13 @@ collectSignalAssignments arch = collectSignalAssignmentsWithContext emptyContext
 -- actual entity definitions instead of heuristics.
 collectSignalAssignmentsWithContext :: AnalysisContext -> Architecture -> Map Identifier [SourceLocation]
 collectSignalAssignmentsWithContext ctx arch =
-  trace ("collectSignalAssignments: architecture has " ++ show (length $ archStatements arch) ++ " statements") $
   let stmtAssignments = concatMap (collectFromArchStatementWithContext ctx) (archStatements arch)
-      result = Map.fromListWith (++) stmtAssignments
-  in trace ("collectSignalAssignments: found " ++ show (Map.size result) ++ " assigned signals: " ++ show (Map.keys result)) result
+  in Map.fromListWith (++) stmtAssignments
 
 -- | Collect assignments from an architecture statement
 collectFromArchStatement :: ArchStatement -> [(Identifier, [SourceLocation])]
-collectFromArchStatement (ProcessStmt _ _ stmts loc) =
+collectFromArchStatement (ProcessStmt _ _ stmts _loc) =
   -- Collect assignments from process statements
-  trace ("collectFromArchStatement (ProcessStmt): found " ++ show (length stmts) ++ " statements") $
   concatMap collectFromSeqStatement stmts
 collectFromArchStatement (ConcurrentAssignment target _ loc) =
   -- ADC-IMPLEMENTS: spellcraft-adc-022
@@ -140,24 +136,20 @@ collectFromArchStatement (ComponentInstStmt inst) =
   -- Full solution requires parsing component entity declarations
   let portMaps = compPortMap inst
       outputPorts = filter isLikelyOutputPort portMaps
-      assignments = [ (targetSignal, [compLocation inst])
-                    | (_, expr) <- outputPorts
-                    , Just targetSignal <- [targetToSignalName expr]
-                    ]
-  in trace ("collectFromArchStatement (ComponentInstStmt): found " ++ show (length assignments) ++ " output port assignments") assignments
+  in [ (targetSignal, [compLocation inst])
+     | (_, expr) <- outputPorts
+     , Just targetSignal <- [targetToSignalName expr]
+     ]
 -- ADC-IMPLEMENTS: spellcraft-adc-028
 -- Handle generate statements by recursively collecting from nested statements
 collectFromArchStatement (GenerateStmt genStmt) =
-  let nestedStmts = genStatements genStmt
-      assignments = concatMap collectFromArchStatement nestedStmts
-  in trace ("collectFromArchStatement (GenerateStmt): found " ++ show (length assignments) ++ " nested assignments") assignments
+  concatMap collectFromArchStatement (genStatements genStmt)
 
 -- | Collect assignments from an architecture statement with multi-file context
 -- ADC-IMPLEMENTS: spellcraft-adc-029
 collectFromArchStatementWithContext :: AnalysisContext -> ArchStatement -> [(Identifier, [SourceLocation])]
 collectFromArchStatementWithContext _ctx (ProcessStmt _ _ stmts _loc) =
   -- Collect assignments from process statements (context not needed)
-  trace ("collectFromArchStatement (ProcessStmt): found " ++ show (length stmts) ++ " statements") $
   concatMap collectFromSeqStatement stmts
 collectFromArchStatementWithContext _ctx (ConcurrentAssignment target _ loc) =
   -- ADC-IMPLEMENTS: spellcraft-adc-022
@@ -177,19 +169,16 @@ collectFromArchStatementWithContext ctx (ComponentInstStmt inst) =
      then
        -- Fall back to heuristic for unknown components
        let outputPorts = filter isLikelyOutputPort portMaps
-           assignments = [ (targetSignal, [compLocation inst])
-                         | (_, expr) <- outputPorts
-                         , Just targetSignal <- [targetToSignalName expr]
-                         ]
-       in trace ("collectFromArchStatement (ComponentInstStmt heuristic): found " ++ show (length assignments) ++ " output port assignments for " ++ show compName) assignments
+       in [ (targetSignal, [compLocation inst])
+          | (_, expr) <- outputPorts
+          , Just targetSignal <- [targetToSignalName expr]
+          ]
      else
-       trace ("collectFromArchStatement (ComponentInstStmt context): found " ++ show (length contextOutputs) ++ " output port assignments for " ++ show compName) contextOutputs
+       contextOutputs
 -- ADC-IMPLEMENTS: spellcraft-adc-028
 -- Handle generate statements by recursively collecting from nested statements
 collectFromArchStatementWithContext ctx (GenerateStmt genStmt) =
-  let nestedStmts = genStatements genStmt
-      assignments = concatMap (collectFromArchStatementWithContext ctx) nestedStmts
-  in trace ("collectFromArchStatement (GenerateStmt): found " ++ show (length assignments) ++ " nested assignments") assignments
+  concatMap (collectFromArchStatementWithContext ctx) (genStatements genStmt)
 
 -- | Get output ports from context using entity definitions
 -- ADC-IMPLEMENTS: spellcraft-adc-029

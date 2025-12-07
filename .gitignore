@@ -61,6 +61,7 @@ contrib/*
 !contrib/CONTRIB_CHANGES.md
 !contrib/README.md
 !contrib/t4mber/
+!contrib/lzx-kaos-levels/
 
 # ADC Temporary Files
 claude_tmp/

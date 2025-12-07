@@ -1,0 +1,80 @@
+{
+  "source": "contrib/lzx/lumarian/enhance.vhd",
+  "generated_at": "2025-11-09T23:16:52.438162",
+  "subtlety_range": "1-5",
+  "total_violations": 4,
+  "by_subtlety": {
+    "1": 1,
+    "2": 1,
+    "3": 1,
+    "4": 0,
+    "5": 1
+  },
+  "violations": [
+    {
+      "id": "level1-undriven",
+      "subtlety": 1,
+      "category": "Signal Integrity",
+      "type": "Completely Undriven Signal",
+      "severity": "obvious",
+      "line": 41,
+      "description": "Signal with obvious name declared but never assigned",
+      "detection_difficulty": "trivial",
+      "expected_detection": {
+        "should_detect": true,
+        "detection_method": "unused_signal_check",
+        "confidence": "very_high"
+      },
+      "file": "enhance-level1-undriven.vhd"
+    },
+    {
+      "id": "level2-partial",
+      "subtlety": 2,
+      "category": "Signal Integrity",
+      "type": "Incompletely Assigned Signal",
+      "severity": "moderate",
+      "line": 41,
+      "description": "Signal assigned in some code paths but not others (latch inference)",
+      "detection_difficulty": "moderate",
+      "expected_detection": {
+        "should_detect": true,
+        "detection_method": "control_flow_analysis",
+        "confidence": "high"
+      },
+      "file": "enhance-level2-partial.vhd"
+    },
+    {
+      "id": "level3-bitgrowth",
+      "subtlety": 3,
+      "category": "Functional Errors",
+      "type": "Silent Overflow",
+      "severity": "subtle",
+      "line": 30,
+      "description": "Counter/accumulator will silently overflow without saturation",
+      "detection_difficulty": "subtle",
+      "expected_detection": {
+        "should_detect": true,
+        "detection_method": "arithmetic_bounds_checker",
+        "confidence": "medium"
+      },
+      "file": "enhance-level3-bitgrowth.vhd"
+    },
+    {
+      "id": "level5-race",
+      "subtlety": 5,
+      "category": "Timing",
+      "type": "Delta Cycle Race Condition",
+      "severity": "extremely_subtle",
+      "line": 41,
+      "description": "Signal update order creates race between stages",
+      "detection_difficulty": "extremely_subtle",
+      "expected_detection": {
+        "should_detect": false,
+        "detection_method": "delta_cycle_analyzer",
+        "confidence": "very_low",
+        "note": "Requires simulation-level analysis"
+      },
+      "file": "enhance-level5-race.vhd"
+    }
+  ]
+}
