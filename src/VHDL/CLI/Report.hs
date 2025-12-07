@@ -2,6 +2,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 
 -- ADC-IMPLEMENTS: spellcraft-adc-005
+-- ADC-IMPLEMENTS: spellcraft-adc-014 Section: Report Updates
 module VHDL.CLI.Report
   ( -- * Reports
     AnalysisReport(..)
@@ -9,7 +10,7 @@ module VHDL.CLI.Report
   , generateReport
   ) where
 
-import Control.Monad (when)
+import Control.Monad (when, unless)
 import Data.Aeson (ToJSON, encode)
 import qualified Data.Text as T
 import qualified Data.Text.IO as TIO
@@ -27,7 +28,7 @@ import VHDL.CLI.Format
   , formatViolation
   )
 import VHDL.CLI.Options (CliOptions(..), OutputFormat(..))
-import VHDL.Constraint.Types (ConstraintViolation(..))
+import VHDL.Constraint.Types (ConstraintViolation(..), Severity(..), violationSeverity)
 import VHDL.Constraint.Library (ComponentLibrary)
 import VHDL.Parser (ParseError, parseVHDLFile)
 import ComponentLibs.TestComponents (testComponentLibrary)
@@ -91,17 +92,35 @@ runAnalysis opts = do
   let allViolations = vhdlViolations ++ clashViolations
   let warnings = []    -- Future: detectComplexityWarnings designs (optThreshold opts)
 
+  -- ADC-IMPLEMENTS: spellcraft-adc-014 Section: Exit Code Logic
+  -- Classify violations by severity
+  let errors = filter (\v -> violationSeverity v == SeverityError) allViolations
+      warningViolations = filter (\v -> violationSeverity v == SeverityWarning) allViolations
+
+  -- Success criteria:
+  -- - No parse errors
+  -- - No error-severity violations
+  -- - If --strict: also no warning-severity violations
+  let hasErrors = not (null parseErrors) || not (null errors)
+      hasWarnings = not (null warningViolations) || not (null warnings)
+      success = not hasErrors && (not (optStrictMode opts) || not hasWarnings)
+
   let report = AnalysisReport
         { reportFiles = optInputFiles opts
         , reportParseErrors = parseErrors
         , reportViolations = allViolations
         , reportWarnings = warnings
-        , reportSuccess = null parseErrors && null allViolations && (not (optStrictMode opts) || null warnings)
+        , reportSuccess = success
         }
 
   generateReport opts report
 
-  pure $ if reportSuccess report then ExitSuccess else ExitFailure 1
+  -- ADC-IMPLEMENTS: spellcraft-adc-014 Section: Exit Code Logic
+  -- Exit code 1 only if:
+  -- - Parse errors exist, OR
+  -- - Error-severity violations exist, OR
+  -- - (--strict mode AND warning-severity violations exist)
+  pure $ if success then ExitSuccess else ExitFailure 1
   where
     partitionFiles :: [FilePath] -> ([FilePath], [FilePath])
     partitionFiles files =
@@ -118,6 +137,7 @@ runAnalysis opts = do
 
 -- | Generate and display report
 -- Contract: spellcraft-adc-005 Section: Interface
+-- ADC-IMPLEMENTS: spellcraft-adc-014 Section: Report Updates
 generateReport :: CliOptions -> AnalysisReport -> IO ()
 generateReport opts report = case optOutputFormat opts of
   JSON -> TIO.putStrLn $ TL.toStrict $ TLE.decodeUtf8 $ encode report
@@ -125,27 +145,41 @@ generateReport opts report = case optOutputFormat opts of
   _ -> do
     -- Human-readable or GCC format
     let fmt = optOutputFormat opts
+    let suppressWarnings = optSuppressWarnings opts
 
     -- Print parse errors
     mapM_ (printError fmt) (reportParseErrors report)
 
-    -- Print violations
-    mapM_ (printViolation fmt) (reportViolations report)
+    -- ADC-IMPLEMENTS: spellcraft-adc-014 Section: Report Updates
+    -- Print violations with color based on severity
+    mapM_ (printViolationBySeverity fmt suppressWarnings) (reportViolations report)
 
-    -- Print warnings
-    mapM_ (printWarning fmt) (reportWarnings report)
+    -- Print warnings (ComplexityWarning type)
+    unless suppressWarnings $
+      mapM_ (printWarning fmt) (reportWarnings report)
 
     -- Summary
+    -- ADC-IMPLEMENTS: spellcraft-adc-014 Section: Report Updates
     when (fmt == HumanReadable) $ do
-      let errorCount = length (reportParseErrors report) + length (reportViolations report)
-      let warningCount = length (reportWarnings report)
+      -- Separate counts for errors and warnings
+      let violations = reportViolations report
+          errorViolations = filter (\v -> violationSeverity v == SeverityError) violations
+          warningViolations = filter (\v -> violationSeverity v == SeverityWarning) violations
+          errorCount = length (reportParseErrors report) + length errorViolations
+          warningCount = length warningViolations + length (reportWarnings report)
 
-      if reportSuccess report
+      if reportSuccess report && errorCount == 0 && warningCount == 0
         then do
-          msg <- green "✓ Analysis complete. No issues found."
+          msg <- green "Analysis complete. No issues found."
+          TIO.putStrLn msg
+        else if errorCount == 0 && warningCount > 0
+        then do
+          -- Only warnings - yellow summary
+          msg <- yellow $ T.pack $ "Analysis complete. Found " <> show warningCount <> " warning(s)"
           TIO.putStrLn msg
         else do
-          msg <- red $ T.pack $ "✗ Found " <> show errorCount <> " error(s), " <> show warningCount <> " warning(s)"
+          -- Has errors - red summary
+          msg <- red $ T.pack $ "Found " <> show errorCount <> " error(s), " <> show warningCount <> " warning(s)"
           TIO.putStrLn msg
 
 printError :: OutputFormat -> ParseError -> IO ()
@@ -154,6 +188,25 @@ printError fmt err = do
   msg <- red formatted
   TIO.putStrLn msg
 
+-- | Print violation with color based on severity
+-- ADC-IMPLEMENTS: spellcraft-adc-014 Section: Report Updates
+printViolationBySeverity :: OutputFormat -> Bool -> ConstraintViolation -> IO ()
+printViolationBySeverity fmt suppressWarnings violation = do
+  let severity = violationSeverity violation
+      formatted = formatViolation fmt violation
+  case severity of
+    SeverityError -> do
+      msg <- red formatted
+      TIO.putStrLn msg
+    SeverityWarning ->
+      unless suppressWarnings $ do
+        msg <- yellow formatted
+        TIO.putStrLn msg
+    SeverityInfo ->
+      unless suppressWarnings $ do
+        TIO.putStrLn formatted  -- No color for info
+
+-- | Print violation (legacy - uses red for all)
 printViolation :: OutputFormat -> ConstraintViolation -> IO ()
 printViolation fmt violation = do
   let formatted = formatViolation fmt violation
