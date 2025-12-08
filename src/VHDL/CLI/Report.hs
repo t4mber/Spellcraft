@@ -4,6 +4,7 @@
 -- ADC-IMPLEMENTS: spellcraft-adc-005
 -- ADC-IMPLEMENTS: spellcraft-adc-014 Section: Report Updates
 -- ADC-IMPLEMENTS: spellcraft-adc-029
+-- ADC-IMPLEMENTS: spellcraft-adc-031 Section: Report Integration
 module VHDL.CLI.Report
   ( -- * Reports
     AnalysisReport(..)
@@ -17,6 +18,7 @@ import qualified Data.Text as T
 import qualified Data.Text.IO as TIO
 import qualified Data.Text.Lazy as TL
 import qualified Data.Text.Lazy.Encoding as TLE
+import Data.Time (getCurrentTime, formatTime, defaultTimeLocale)
 import GHC.Generics (Generic)
 import System.Exit (ExitCode(..))
 import System.IO (hFlush, stdout)
@@ -28,6 +30,7 @@ import VHDL.CLI.Format
   , formatViolation
   )
 import VHDL.CLI.Options (CliOptions(..), OutputFormat(..))
+import VHDL.CLI.Export (exportJSON, exportSARIF)
 import VHDL.Constraint.Types (ConstraintViolation(..), Severity(..), violationSeverity)
 import VHDL.Constraint.Library (ComponentLibrary)
 import VHDL.Parser (ParseError, parseVHDLFile)
@@ -139,9 +142,27 @@ runAnalysis opts = do
 -- | Generate and display report
 -- Contract: spellcraft-adc-005 Section: Interface
 -- ADC-IMPLEMENTS: spellcraft-adc-014 Section: Report Updates
+-- ADC-IMPLEMENTS: spellcraft-adc-031 Section: Report Generation
 generateReport :: CliOptions -> AnalysisReport -> IO ()
 generateReport opts report = case optOutputFormat opts of
-  JSON -> TIO.putStrLn $ TL.toStrict $ TLE.decodeUtf8 $ encode report
+  JSON -> do
+    -- ADC-IMPLEMENTS: spellcraft-adc-031 Section: JSON Export
+    now <- getCurrentTime
+    let timestamp = T.pack $ formatTime defaultTimeLocale "%Y-%m-%dT%H:%M:%SZ" now
+    let jsonOutput = exportJSON
+          timestamp
+          (reportFiles report)
+          (reportViolations report)
+          (reportParseErrors report)
+          (reportSuccess report)
+    TIO.putStrLn jsonOutput
+
+  SARIF -> do
+    -- ADC-IMPLEMENTS: spellcraft-adc-031 Section: SARIF Export
+    let sarifOutput = exportSARIF
+          (reportViolations report)
+          (reportParseErrors report)
+    TIO.putStrLn sarifOutput
 
   _ -> do
     -- Human-readable or GCC format

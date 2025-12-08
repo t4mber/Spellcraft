@@ -37,10 +37,12 @@ data CliOptions = CliOptions
   } deriving (Show, Eq)
 
 -- | Output formats
+-- ADC-IMPLEMENTS: spellcraft-adc-031 Section: CLI Flags
 data OutputFormat
-  = HumanReadable
-  | JSON
-  | GCC
+  = HumanReadable   -- ^ Human-readable colored output
+  | JSON            -- ^ JSON format for CI/CD integration
+  | GCC             -- ^ GCC-compatible format
+  | SARIF           -- ^ SARIF 2.1.0 for IDE/GitHub integration
   deriving (Show, Eq, Enum, Bounded)
 
 -- | Parse CLI options
@@ -60,9 +62,10 @@ cliParser = CliOptions
   <*> option formatReader
       ( long "format"
      <> short 'f'
+     <> long "output-format"  -- alias for compatibility
      <> metavar "FORMAT"
      <> value HumanReadable
-     <> help "Output format: human, json, gcc" )
+     <> help "Output format: human|text, json, gcc, sarif" )
   <*> option auto
       ( long "threshold"
      <> short 't'
@@ -101,6 +104,8 @@ analysisModeParser =
 formatReader :: ReadM OutputFormat
 formatReader = eitherReader $ \s -> case s of
   "human" -> Right HumanReadable
-  "json" -> Right JSON
-  "gcc" -> Right GCC
-  _ -> Left $ "Invalid format: " <> s <> ". Use: human, json, or gcc"
+  "text"  -> Right HumanReadable  -- alias for human
+  "json"  -> Right JSON
+  "gcc"   -> Right GCC
+  "sarif" -> Right SARIF
+  _ -> Left $ "Invalid format: " <> s <> ". Use: human, json, gcc, or sarif"
