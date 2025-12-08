@@ -14,11 +14,10 @@ module VHDL.Videomancer.Analysis
 
 import Control.Exception (Exception)
 import Data.Text (Text)
-import qualified Data.Text as T
 import GHC.Generics (Generic)
 import Data.Aeson (ToJSON)
 import VHDL.AST (VHDLDesign(..))
-import VHDL.Parser (parseVHDLFile, ParseError(..))
+import VHDL.Parser (ParseError(..))
 import VHDL.Analysis.ClockSource (detectClockSources)
 import VHDL.Videomancer.Config (ProgramConfig)
 

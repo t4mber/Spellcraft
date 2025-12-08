@@ -33,16 +33,14 @@ module VHDL.Videomancer.Config
   , ConfigError(..)
   ) where
 
-import Control.Monad (when, unless)
+import Control.Monad (when)
 import Data.Aeson (FromJSON(..), ToJSON, (.:), (.:?), withObject, withText)
 import Data.Text (Text)
 import qualified Data.Text as T
-import qualified Data.Text.IO as TIO
-import qualified Data.Text.Encoding as TE
 import qualified Data.Aeson as Aeson
 import qualified Data.ByteString as BS
 import GHC.Generics (Generic)
-import Data.Maybe (isJust, isNothing, fromMaybe)
+import Data.Maybe (isNothing)
 import qualified Data.Set as Set
 
 -- | Type of parameter (RANGE or BOOLEAN)

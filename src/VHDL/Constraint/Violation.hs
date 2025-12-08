@@ -6,15 +6,14 @@ module VHDL.Constraint.Violation
   ) where
 
 import Data.Text (Text)
-import VHDL.AST (Value(..), Identifier)
+import VHDL.AST (Value(..))
 import VHDL.Constraint.Types
   ( ConstraintViolation(..)
   , GenericConstraint(..)
-  , GenericType(..)
   , Range(..)
   , PortConstraint(..)
   )
-import VHDL.SourceLocation (SourceLocation, mkSourceLocation)
+import VHDL.SourceLocation (SourceLocation)
 
 -- | Check if a generic value satisfies its constraint
 -- Contract: spellcraft-adc-002 Section: Interface

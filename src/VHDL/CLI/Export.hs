@@ -32,7 +32,6 @@ module VHDL.CLI.Export
   ) where
 
 import Data.Aeson (ToJSON(..), (.=), object, encode)
-import qualified Data.Aeson as Aeson
 import Data.Text (Text)
 import qualified Data.Text as T
 import qualified Data.Text.Lazy as TL

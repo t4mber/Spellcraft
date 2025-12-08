@@ -13,11 +13,9 @@ module VHDL.CLI.Report
   ) where
 
 import Control.Monad (when, unless)
-import Data.Aeson (ToJSON, encode)
+import Data.Aeson (ToJSON)
 import qualified Data.Text as T
 import qualified Data.Text.IO as TIO
-import qualified Data.Text.Lazy as TL
-import qualified Data.Text.Lazy.Encoding as TLE
 import Data.Time (getCurrentTime, formatTime, defaultTimeLocale)
 import GHC.Generics (Generic)
 import System.Exit (ExitCode(..))
@@ -38,13 +36,12 @@ import ComponentLibs.TestComponents (testComponentLibrary)
 import VHDL.Analysis.ClockGraph (buildClockGraph)
 import VHDL.Analysis.Propagation (propagateFrequencies)
 import VHDL.Analysis.Violation (detectFrequencyViolations)
-import VHDL.Analysis.ClashFile (analyzeClashFile, ClashAnalysisResult(..), ClashViolation(..), clashViolationToConstraint)
+import VHDL.Analysis.ClashFile (analyzeClashFile, ClashAnalysisResult(..), clashViolationToConstraint)
 import VHDL.Analysis.SignalUsage (analyzeSignalUsageWithContext, SignalViolation(..), violationSignal, violationLocation, violationType)
 import VHDL.Analysis.MultiFile (buildContext)
 import VHDL.Analysis.ControlFlow (analyzeControlFlow, ControlFlowViolation(..), latchSignal, latchLocation, latchDescription)
 import VHDL.Analysis.ArithmeticBounds (checkArithmeticBounds, ArithmeticViolation(..))
 import VHDL.AST (VHDLDesign, designArchitectures)
-import VHDL.SourceLocation (SourceLocation(..))
 import System.FilePath (takeExtension)
 
 -- | Analysis report
@@ -133,7 +130,7 @@ runAnalysis opts = do
       in (vhdl, clash)
 
     extractClashViolations :: Either String ClashAnalysisResult -> [ConstraintViolation]
-    extractClashViolations (Left err) =
+    extractClashViolations (Left _err) =
       -- Create a parse-like error for Clash analysis failures
       []  -- For now, silently skip errors
     extractClashViolations (Right result) =
@@ -227,13 +224,6 @@ printViolationBySeverity fmt suppressWarnings violation = do
     SeverityInfo ->
       unless suppressWarnings $ do
         TIO.putStrLn formatted  -- No color for info
-
--- | Print violation (legacy - uses red for all)
-printViolation :: OutputFormat -> ConstraintViolation -> IO ()
-printViolation fmt violation = do
-  let formatted = formatViolation fmt violation
-  msg <- red formatted
-  TIO.putStrLn msg
 
 printWarning :: OutputFormat -> ComplexityWarning -> IO ()
 printWarning fmt warning = do

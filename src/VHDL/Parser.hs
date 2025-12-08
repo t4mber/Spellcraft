@@ -19,7 +19,6 @@ import Data.Maybe (catMaybes, isJust)
 import Data.Text (Text)
 import qualified Data.Text as T
 import qualified Data.Text.IO as TIO
-import Debug.Trace (trace)
 import GHC.Generics (Generic)
 import Text.Megaparsec hiding (ParseError)
 import Text.Megaparsec.Char (char)
@@ -276,15 +275,7 @@ processStmt = do
   pure ()
   void $ keyword "begin"
   pure ()
-  -- Debug: try to peek at next token
-  _ <- optional $ try $ do
-    pos <- getSourcePos
-    
-    nextTok <- optional $ try $ lookAhead identifier
-    
-    -- Try to manually check if "end" matches
-    endMatches <- optional $ try $ lookAhead (keyword "end")
-    pure ()
+  -- Debug: try to peek at next token (removed debug code)
   -- Parse sequential statements per ADC-013
   statements <- parseSequentialStatements
   pure ()
@@ -366,7 +357,7 @@ generateStmt = do
   sc  -- Consume leading whitespace/comments
   pos <- getSourcePos
   -- Generate statements require a label
-  label <- identifier
+  genLbl <- identifier
   void colon
   -- Parse either for-generate or if-generate scheme
   scheme <- choice
@@ -382,7 +373,7 @@ generateStmt = do
   void $ optional (try identifier)
   void semi
   pure $ GenerateStmt GenerateStatement
-    { genLabel = label
+    { genLabel = genLbl
     , genScheme = scheme
     , genStatements = statements
     , genLocation = sourcePosToLocation pos
@@ -470,13 +461,9 @@ architectureDecl = do
   -- We should now be at "begin"
   void $ keyword "begin"
   pure ()
-  posAfterBegin <- getSourcePos
-  
   -- Parse architecture body statements
   -- This collects processes, concurrent assignments, and component instantiations
   statements <- many (try archStatement)
-  posAfterStmts <- getSourcePos
-  
   -- Now consume the "end architecture" terminator
   -- Supports both "end architecture;" and "end architecture <name>;"
   void $ keyword "end"
@@ -618,9 +605,6 @@ sourcePosToLocation pos = SourceLocation
 parseSequentialStatement :: Parser Statement
 parseSequentialStatement = do
   sc  -- Consume leading whitespace
-  pure ()
-  posAfterSc <- getSourcePos
-  
   -- Try to parse different statement types
   choice
     [ try parseSignalAssignment
@@ -741,7 +725,7 @@ parseCaseStatement = do
       choices <- parseCaseChoice `sepBy1` (symbol "|")
       -- Combine multiple choices into an Aggregate for now
       let choiceExpr = case choices of
-            [single] -> single
+            [singleChoice] -> singleChoice
             multiple -> Aggregate multiple  -- Use Aggregate to represent multiple choices
       void $ symbol "=>"
       stmts <- many (try (notFollowedBy nextWhenOrEnd >> parseSequentialStatement))
@@ -889,14 +873,14 @@ parsePostfixOps base = do
   ops <- many $ try $ choice
     [ do  -- Attribute: 'name or 'name(params)
         void $ char '\''
-        lookAhead $ satisfy (\c -> isAlpha c || c == '_')
+        _ <- lookAhead $ satisfy (\c -> isAlpha c || c == '_')
         attrName <- identifier
         params <- option [] $ try $ parens $ parseExpression `sepBy` comma
         pure $ \expr -> AttributeExpr expr attrName params
     , do  -- Selected name: .field
         void $ symbol "."
         -- Ensure next character is letter/underscore (not digit - that would be real literal)
-        lookAhead $ satisfy (\c -> isAlpha c || c == '_')
+        _ <- lookAhead $ satisfy (\c -> isAlpha c || c == '_')
         fieldName <- identifier
         pure $ \expr -> SelectedName expr fieldName
     , do  -- ADC-027: Cascaded index or slice: (index) or (high downto low)
@@ -969,14 +953,6 @@ parseFunctionCallOrIndexed = try $ do
           -- Multiple comma-separated expressions - function call
           pure $ FunctionCall name (firstExpr : rest)
 
--- | Parse function call (kept for backward compat, delegates to combined parser)
-parseFunctionCall :: Parser Expression
-parseFunctionCall = parseFunctionCallOrIndexed
-
--- | Parse indexed name (kept for backward compat, delegates to combined parser)
-parseIndexedName :: Parser Expression
-parseIndexedName = parseFunctionCallOrIndexed
-
 -- | Parse aggregate (array literal)
 -- ADC-IMPLEMENTS: spellcraft-adc-015
 -- Handles aggregates like (others => '0'), (1, 2, 3), (x => 1, y => 2)
@@ -1018,8 +994,8 @@ parseAggregate = do
   let allElems = firstElem : restElems
   -- If single element without =>, treat as parenthesized expression
   case allElems of
-    [single@(BinaryExpr Eq _ _)] -> pure $ Aggregate [single]  -- (others => x) is aggregate
-    [single] -> pure single  -- (x) is just parentheses
+    [singleElem@(BinaryExpr Eq _ _)] -> pure $ Aggregate [singleElem]  -- (others => x) is aggregate
+    [singleElem] -> pure singleElem  -- (x) is just parentheses
     multiple -> pure $ Aggregate multiple  -- Multiple elements is aggregate
 
 -- | Parse literal

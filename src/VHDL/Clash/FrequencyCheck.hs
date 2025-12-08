@@ -1,6 +1,9 @@
 {-# LANGUAGE UndecidableInstances #-}
 {-# LANGUAGE AllowAmbiguousTypes #-}
 {-# LANGUAGE TypeApplications #-}
+{-# OPTIONS_GHC -Wno-partial-fields #-}
+-- Note: Partial fields warning suppressed for FrequencyCheckResult sum type
+-- which uses different record fields per constructor by design
 
 -- ADC-IMPLEMENTS: spellcraft-adc-006
 module VHDL.Clash.FrequencyCheck
@@ -21,10 +24,9 @@ module VHDL.Clash.FrequencyCheck
   , FrequencyCheckResult(..)
   ) where
 
-import Data.Text (Text)
 import qualified Data.Text as T
-import GHC.TypeLits (Nat, KnownNat)
-import GHC.TypeNats (Div, type (<=?))
+import GHC.TypeLits (KnownNat)
+import GHC.TypeNats (type (<=?))
 import Data.Kind (Constraint)
 import Data.Proxy (Proxy(..))
 import Data.Type.Bool (type (&&))
@@ -36,11 +38,10 @@ import VHDL.Clash.Types
   , HWSignal(..)
   , PLL(..)
   , Encoder(..)
-  , mkHWSignal
   , natToInteger
   )
 import VHDL.Constraint.Types (ConstraintViolation(..))
-import VHDL.SourceLocation (SourceLocation, mkSourceLocation)
+import VHDL.SourceLocation (mkSourceLocation)
 
 -- | Type-level constraint: actual frequency must be <= max frequency
 -- Contract: spellcraft-adc-006 Section: Type-Level Constraint Checking
@@ -83,17 +84,17 @@ data FrequencyCheckResult
 -- | Safe PLL connection with type-level frequency checking
 -- The output frequency must equal input frequency times the multiplication factor
 -- Contract: spellcraft-adc-006 Section: Safe Connection Functions
-connectPLL :: forall inFreq factor outFreq a.
-              (KnownNat inFreq, KnownNat factor, KnownNat outFreq,
-               outFreq ~ FreqMult inFreq factor)
+-- Note: outFreq is computed as FreqMult inFreq factor using type-level arithmetic
+connectPLL :: forall inFreq factor a.
+              (KnownNat inFreq, KnownNat factor, KnownNat (FreqMult inFreq factor))
            => PLL inFreq factor
            -> HWSignal inFreq a
-           -> HWSignal outFreq a
-connectPLL pll inputSignal = HWSignal
+           -> HWSignal (FreqMult inFreq factor) a
+connectPLL _pll inputSignal = HWSignal
   { hwSignalName = hwSignalName inputSignal <> "_pll_out"
   , hwSignalDomain = ClockDomain
       { domainName = domainName (hwSignalDomain inputSignal) <> "_pll"
-      , domainFreqMHz = natToInteger @outFreq
+      , domainFreqMHz = natToInteger @(FreqMult inFreq factor)
       }
   , hwSignalMetadata = Just $ T.pack $ "PLL multiplied by " ++ show (natToInteger @factor)
   }
@@ -102,7 +103,7 @@ connectPLL pll inputSignal = HWSignal
 -- Returns Either to indicate constraint violation at runtime
 -- Contract: spellcraft-adc-006 Section: Safe Connection Functions
 connectEncoder :: forall freq maxFreq a.
-                  (KnownNat freq, KnownNat maxFreq, CheckMaxFreq freq maxFreq)
+                  (KnownNat freq, KnownNat maxFreq)
                => Encoder maxFreq
                -> HWSignal freq a
                -> Either ConstraintViolation (HWSignal freq a)
@@ -123,6 +124,7 @@ connectEncoder encoder signal =
 
 -- | Safe clock divider connection
 -- Divides the frequency by a compile-time constant
+-- Note: divisor type parameter is used for compile-time frequency verification
 connectClockDivider :: forall inFreq divisor outFreq a.
                        (KnownNat inFreq, KnownNat divisor, KnownNat outFreq,
                         outFreq ~ FreqDiv inFreq divisor)

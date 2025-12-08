@@ -48,6 +48,8 @@ formatViolation fmt violation@(FrequencyViolation comp port actual maxFreq loc) 
       (T.unpack $ formatLocation loc) (T.unpack sev) (T.unpack comp) (T.unpack port) actual maxFreq
     JSON -> T.pack $ printf "{\"type\":\"FrequencyViolation\",\"severity\":\"%s\",\"component\":\"%s\",\"port\":\"%s\",\"actual\":%.1f,\"max\":%.1f}"
       (T.unpack sev) (T.unpack comp) (T.unpack port) actual maxFreq
+    SARIF -> T.pack $ printf "{\"type\":\"FrequencyViolation\",\"severity\":\"%s\",\"component\":\"%s\",\"port\":\"%s\",\"actual\":%.1f,\"max\":%.1f}"
+      (T.unpack sev) (T.unpack comp) (T.unpack port) actual maxFreq
 
 formatViolation fmt violation@(GenericRangeViolation comp generic val range loc) =
   let sev = severityLabel (violationSeverity violation)
@@ -58,6 +60,8 @@ formatViolation fmt violation@(GenericRangeViolation comp generic val range loc)
       (T.unpack $ formatLocation loc) (T.unpack sev) (T.unpack comp) (T.unpack generic) (show val) (show range)
     JSON -> T.pack $ printf "{\"type\":\"GenericRangeViolation\",\"severity\":\"%s\",\"component\":\"%s\",\"generic\":\"%s\"}"
       (T.unpack sev) (T.unpack comp) (T.unpack generic)
+    SARIF -> T.pack $ printf "{\"type\":\"GenericRangeViolation\",\"severity\":\"%s\",\"component\":\"%s\",\"generic\":\"%s\"}"
+      (T.unpack sev) (T.unpack comp) (T.unpack generic)
 
 formatViolation fmt violation@(FanOutViolation comp port actualFanOut maxFanOut loc) =
   let sev = severityLabel (violationSeverity violation)
@@ -67,6 +71,8 @@ formatViolation fmt violation@(FanOutViolation comp port actualFanOut maxFanOut 
     GCC -> T.pack $ printf "%s: %s: Fan-out violation: %s.%s has %d connections (max: %d)"
       (T.unpack $ formatLocation loc) (T.unpack sev) (T.unpack comp) (T.unpack port) actualFanOut maxFanOut
     JSON -> T.pack $ printf "{\"type\":\"FanOutViolation\",\"severity\":\"%s\",\"component\":\"%s\",\"port\":\"%s\",\"actual\":%d,\"max\":%d}"
+      (T.unpack sev) (T.unpack comp) (T.unpack port) actualFanOut maxFanOut
+    SARIF -> T.pack $ printf "{\"type\":\"FanOutViolation\",\"severity\":\"%s\",\"component\":\"%s\",\"port\":\"%s\",\"actual\":%d,\"max\":%d}"
       (T.unpack sev) (T.unpack comp) (T.unpack port) actualFanOut maxFanOut
 
 -- | Format signal usage violation
@@ -81,6 +87,8 @@ formatViolation fmt violation@(SignalUsageViolation sigName desc loc) =
       (T.unpack $ formatLocation loc) (T.unpack sev) (T.unpack desc) (T.unpack sigName)
     JSON -> T.pack $ printf "{\"type\":\"SignalUsageViolation\",\"severity\":\"%s\",\"signal\":\"%s\",\"description\":\"%s\"}"
       (T.unpack sev) (T.unpack sigName) (T.unpack desc)
+    SARIF -> T.pack $ printf "{\"type\":\"SignalUsageViolation\",\"severity\":\"%s\",\"signal\":\"%s\",\"description\":\"%s\"}"
+      (T.unpack sev) (T.unpack sigName) (T.unpack desc)
 
 -- | Format control flow violation (latch inference)
 -- ADC-IMPLEMENTS: spellcraft-adc-012 Section: Control Flow Analysis
@@ -94,6 +102,8 @@ formatViolation fmt violation@(ControlFlowViolation sigName desc loc) =
       (T.unpack $ formatLocation loc) (T.unpack sev) (T.unpack sigName)
     JSON -> T.pack $ printf "{\"type\":\"ControlFlowViolation\",\"severity\":\"%s\",\"signal\":\"%s\",\"description\":\"%s\"}"
       (T.unpack sev) (T.unpack sigName) (T.unpack desc)
+    SARIF -> T.pack $ printf "{\"type\":\"ControlFlowViolation\",\"severity\":\"%s\",\"signal\":\"%s\",\"description\":\"%s\"}"
+      (T.unpack sev) (T.unpack sigName) (T.unpack desc)
 
 -- | Format arithmetic bounds violation (overflow risk)
 -- ADC-IMPLEMENTS: spellcraft-adc-012 Section: Arithmetic Bounds Checker
@@ -106,6 +116,8 @@ formatViolation fmt violation@(ArithmeticBoundsViolation sigName desc loc) =
     GCC -> T.pack $ printf "%s: %s: Overflow risk: %s"
       (T.unpack $ formatLocation loc) (T.unpack sev) (T.unpack sigName)
     JSON -> T.pack $ printf "{\"type\":\"ArithmeticBoundsViolation\",\"severity\":\"%s\",\"signal\":\"%s\",\"description\":\"%s\"}"
+      (T.unpack sev) (T.unpack sigName) (T.unpack desc)
+    SARIF -> T.pack $ printf "{\"type\":\"ArithmeticBoundsViolation\",\"severity\":\"%s\",\"signal\":\"%s\",\"description\":\"%s\"}"
       (T.unpack sev) (T.unpack sigName) (T.unpack desc)
 
 -- | Format complexity warning
@@ -122,6 +134,8 @@ formatComplexityWarning fmt warning =
       (T.unpack $ formatLocation loc) depth threshold
     JSON -> T.pack $ printf "{\"type\":\"ComplexityWarning\",\"depth\":%d,\"threshold\":%d}"
       depth threshold
+    SARIF -> T.pack $ printf "{\"type\":\"ComplexityWarning\",\"depth\":%d,\"threshold\":%d}"
+      depth threshold
 
 -- | Format parse error
 -- Contract: spellcraft-adc-005 Section: Interface
@@ -135,4 +149,6 @@ formatParseError fmt err =
     GCC -> T.pack $ printf "%s: error: %s"
       (T.unpack $ formatLocation loc) (T.unpack msg)
     JSON -> T.pack $ printf "{\"type\":\"ParseError\",\"message\":\"%s\"}"
+      (T.unpack msg)
+    SARIF -> T.pack $ printf "{\"type\":\"ParseError\",\"message\":\"%s\"}"
       (T.unpack msg)
