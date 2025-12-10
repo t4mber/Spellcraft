@@ -10,12 +10,9 @@ module VHDL.Clash.ExampleValidationSpec (spec) where
 
 import Test.Hspec
 import Data.Proxy (Proxy(..))
-import GHC.TypeLits (KnownNat)
 
 import VHDL.Clash.Types
 import VHDL.Clash.FrequencyCheck
-import VHDL.Clash.Domains
-import VHDL.Clash.Constraints
 
 spec :: Spec
 spec = do

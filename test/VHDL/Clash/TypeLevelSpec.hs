@@ -7,15 +7,12 @@
 module VHDL.Clash.TypeLevelSpec (spec) where
 
 import Test.Hspec
-import Test.QuickCheck
 import Data.Proxy (Proxy(..))
-import GHC.TypeLits (KnownNat)
 
 import VHDL.Clash.Types
 import VHDL.Clash.FrequencyCheck
 import VHDL.Clash.Domains
 import VHDL.Clash.Constraints
-import qualified Data.Text as T
 
 spec :: Spec
 spec = do

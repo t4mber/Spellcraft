@@ -15,7 +15,9 @@ spec = do
       case result of
         Right design -> do
           length (designLibraries design) `shouldBe` 1
-          libName (head $ designLibraries design) `shouldBe` "work"
+          case designLibraries design of
+            (lib:_) -> libName lib `shouldBe` "work"
+            [] -> expectationFailure "Expected at least one library"
         Left _ -> expectationFailure "Expected Right but got Left"
 
     it "parses use work.all clause" $ do
@@ -24,8 +26,11 @@ spec = do
       case result of
         Right design -> do
           length (designUses design) `shouldBe` 1
-          useLibrary (head $ designUses design) `shouldBe` "work"
-          usePackage (head $ designUses design) `shouldBe` "all"
+          case designUses design of
+            (use:_) -> do
+              useLibrary use `shouldBe` "work"
+              usePackage use `shouldBe` "all"
+            [] -> expectationFailure "Expected at least one use clause"
         Left _ -> expectationFailure "Expected Right but got Left"
 
     it "parses complete design with entities" $ do
@@ -34,7 +39,9 @@ spec = do
       case result of
         Right design -> do
           length (designEntities design) `shouldBe` 1
-          entityName (head $ designEntities design) `shouldBe` "test_entity"
+          case designEntities design of
+            (entity:_) -> entityName entity `shouldBe` "test_entity"
+            [] -> expectationFailure "Expected at least one entity"
         Left _ -> expectationFailure "Expected Right but got Left"
 
   describe "Multi-Signal Declaration Support (ADC-008)" $ do
@@ -45,7 +52,9 @@ spec = do
         Right design -> do
           length (designArchitectures design) `shouldBe` 1
           -- Should find 7 signals: single_sig, sig_a, sig_b, sig_c, data_r, data_g, data_b
-          length (archSignals (head $ designArchitectures design)) `shouldBe` 7
+          case designArchitectures design of
+            (arch:_) -> length (archSignals arch) `shouldBe` 7
+            [] -> expectationFailure "Expected at least one architecture"
         Left _ -> expectationFailure "Expected Right but got Left"
 
     it "parses based literals (hex)" $ do
@@ -59,8 +68,12 @@ spec = do
       case result of
         Right design -> do
           length (designEntities design) `shouldBe` 1
-          entityName (head $ designEntities design) `shouldBe` "codeglow_pattern"
+          case designEntities design of
+            (entity:_) -> entityName entity `shouldBe` "codeglow_pattern"
+            [] -> expectationFailure "Expected at least one entity"
           length (designArchitectures design) `shouldBe` 1
           -- Should find 5 signals: s1_r, s1_g, s1_b, phase_acc, lfsr_state
-          length (archSignals (head $ designArchitectures design)) `shouldBe` 5
+          case designArchitectures design of
+            (arch:_) -> length (archSignals arch) `shouldBe` 5
+            [] -> expectationFailure "Expected at least one architecture"
         Left err -> expectationFailure $ "Parse failed: " ++ show err
