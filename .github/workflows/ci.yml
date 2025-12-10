@@ -71,28 +71,14 @@ jobs:
       - name: Create reports directory
         run: mkdir -p reports
 
-      - name: Analyze LZX Lumarian
+      - name: Analyze Codeglow
         run: |
-          stack exec spellcraft -- --format=json contrib/lzx/lumarian/*.vhd > reports/lumarian.json 2>&1 || true
+          stack exec spellcraft -- --format=json contrib/t4mber/codeglow/*.vhd > reports/codeglow.json 2>&1 || true
         continue-on-error: true
 
-      - name: Analyze LZX Mirrorbound
+      - name: Analyze KAOS ELF test fixtures
         run: |
-          stack exec spellcraft -- --format=json contrib/lzx/mirrorbound/*.vhd > reports/mirrorbound.json 2>&1 || true
-        continue-on-error: true
-
-      - name: Analyze LZX KAOS
-        run: |
-          stack exec spellcraft -- --format=json contrib/lzx-kaos/*.vhd > reports/lzx-kaos.json 2>&1 || true
-        continue-on-error: true
-
-      - name: Analyze Codeglow (if VHDL exists)
-        run: |
-          if ls contrib/t4mber/codeglow/*.vhd 1> /dev/null 2>&1; then
-            stack exec spellcraft -- --format=json contrib/t4mber/codeglow/*.vhd > reports/codeglow.json 2>&1 || true
-          else
-            echo '{"message": "No VHDL files in codeglow"}' > reports/codeglow.json
-          fi
+          stack exec spellcraft -- --format=json test/fixtures/kaos-elf/*.vhd > reports/kaos-elf.json 2>&1 || true
         continue-on-error: true
 
       - name: Generate Combined Report
@@ -165,7 +151,7 @@ jobs:
 
       - name: Generate SARIF Report
         run: |
-          stack exec spellcraft -- --format=sarif contrib/lzx/lumarian/*.vhd contrib/lzx/mirrorbound/*.vhd > results.sarif 2>&1 || true
+          stack exec spellcraft -- --format=sarif contrib/t4mber/codeglow/*.vhd test/fixtures/kaos-elf/*.vhd > results.sarif 2>&1 || true
 
       - name: Upload SARIF to GitHub Security
         uses: github/codeql-action/upload-sarif@v3

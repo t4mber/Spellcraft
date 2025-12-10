@@ -25,10 +25,8 @@ The `analyze-contrib` job produces the following artifacts:
 
 ```
 reports/
-├── lumarian.json      # LZX Lumarian analysis
-├── mirrorbound.json   # LZX Mirrorbound analysis
-├── lzx-kaos.json      # LZX KAOS analysis
-├── codeglow.json      # Codeglow analysis (if VHDL files exist)
+├── codeglow.json      # Codeglow VHDL analysis
+├── kaos-elf.json      # KAOS ELF test fixtures analysis
 └── combined.json      # All reports combined with timestamp
 ```
 
