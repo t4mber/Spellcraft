@@ -14,7 +14,7 @@ spec :: Spec
 spec = do
   describe "Videomancer Config Loading" $ do
     it "loads Lumarian configuration successfully" $ do
-      result <- loadProgramConfig "contrib/lzx/lumarian/lumarian.json"
+      result <- loadProgramConfig "test/fixtures/videomancer/test-lumarian.json"
       result `shouldSatisfy` isRight
       case result of
         Right config -> do
@@ -23,7 +23,7 @@ spec = do
         Left err -> expectationFailure $ "Expected Right but got Left: " ++ show err
 
     it "loads Mirrorbound configuration successfully" $ do
-      result <- loadProgramConfig "contrib/lzx/mirrorbound/mirrorbound.json"
+      result <- loadProgramConfig "test/fixtures/videomancer/test-mirrorbound.json"
       result `shouldSatisfy` isRight
       case result of
         Right config -> do

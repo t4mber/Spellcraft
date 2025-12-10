@@ -1,0 +1,20 @@
+{
+  "program_config": {
+    "name": "Mirrorbound",
+    "version": "1.0.0",
+    "parameter_configs": [
+      {"ref": "P1", "name": "Mirror Position", "type": "RANGE", "float_precision": 1, "min": 0, "max": 100, "suffix": "%"},
+      {"ref": "P2", "name": "Mirror Width", "type": "RANGE", "float_precision": 1, "min": 0, "max": 100, "suffix": "%"},
+      {"ref": "P3", "name": "Feedback", "type": "RANGE", "float_precision": 1, "min": 0, "max": 100, "suffix": "%"},
+      {"ref": "P4", "name": "Decay", "type": "RANGE", "float_precision": 3, "min": 0, "max": 1, "suffix": ""},
+      {"ref": "P5", "name": "Horizontal", "type": "BOOLEAN", "labels": ["On", "Off"]},
+      {"ref": "P6", "name": "Vertical", "type": "BOOLEAN", "labels": ["On", "Off"]},
+      {"ref": "P7", "name": "Invert", "type": "BOOLEAN", "labels": ["On", "Off"]},
+      {"ref": "P8", "name": "Soft Edge", "type": "BOOLEAN", "labels": ["On", "Off"]},
+      {"ref": "P9", "name": "Mode", "type": "BOOLEAN", "labels": ["Mirror", "Kaleidoscope"]},
+      {"ref": "P10", "name": "Color Shift", "type": "RANGE", "float_precision": 1, "min": 0, "max": 360, "suffix": "deg"},
+      {"ref": "P11", "name": "Blend", "type": "RANGE", "float_precision": 1, "min": 0, "max": 100, "suffix": "%"},
+      {"ref": "P12", "name": "Freeze", "type": "BOOLEAN", "labels": ["On", "Off"]}
+    ]
+  }
+}

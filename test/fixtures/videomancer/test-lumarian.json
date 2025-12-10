@@ -1,0 +1,20 @@
+{
+  "program_config": {
+    "name": "Lumarian",
+    "version": "1.0.0",
+    "parameter_configs": [
+      {"ref": "P1", "name": "Contrast", "type": "RANGE", "float_precision": 1, "min": 0, "max": 200, "suffix": "%"},
+      {"ref": "P2", "name": "Brightness", "type": "RANGE", "float_precision": 3, "min": -1, "max": 1, "suffix": ""},
+      {"ref": "P3", "name": "Saturation", "type": "RANGE", "float_precision": 1, "min": 0, "max": 200, "suffix": "%"},
+      {"ref": "P4", "name": "Gamma", "type": "RANGE", "float_precision": 3, "min": -2, "max": 2, "suffix": ""},
+      {"ref": "P5", "name": "Edge Gain", "type": "RANGE", "float_precision": 1, "min": 0, "max": 400, "suffix": "%"},
+      {"ref": "P6", "name": "Edge Cutoff", "type": "RANGE", "float_precision": 1, "min": 0, "max": 100, "suffix": "%"},
+      {"ref": "P7", "name": "Luma Invert", "type": "BOOLEAN", "labels": ["On", "Off"]},
+      {"ref": "P8", "name": "Chroma Invert", "type": "BOOLEAN", "labels": ["On", "Off"]},
+      {"ref": "P9", "name": "Edge Invert", "type": "BOOLEAN", "labels": ["On", "Off"]},
+      {"ref": "P10", "name": "Edge Rectify", "type": "BOOLEAN", "labels": ["On", "Off"]},
+      {"ref": "P11", "name": "Edge Select", "type": "BOOLEAN", "labels": ["Single", "Both"]},
+      {"ref": "P12", "name": "Luma Blank", "type": "RANGE", "float_precision": 1, "min": 0, "max": 100, "suffix": "%"}
+    ]
+  }
+}
