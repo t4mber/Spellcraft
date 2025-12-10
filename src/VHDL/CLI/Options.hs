@@ -1,3 +1,6 @@
+{-# OPTIONS_GHC -Wno-partial-fields #-}
+-- | Partial fields are intentional - VideomancerMode has fields that StandardMode doesn't.
+
 -- ADC-IMPLEMENTS: spellcraft-adc-005
 -- ADC-IMPLEMENTS: spellcraft-adc-014 Section: CLI Flags
 -- ADC-IMPLEMENTS: <videomancer-integration-01>

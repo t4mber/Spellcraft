@@ -95,6 +95,7 @@ data PLL (inFreq :: FreqMHz) (factor :: Nat) = PLL
 -- | Smart constructor for PLL
 -- Validates that input and output frequencies are correctly related
 -- Note: outFreq type parameter is intentionally used for compile-time frequency verification
+-- KnownNat outFreq is needed to compute the output frequency at runtime
 mkPLL :: forall inFreq factor outFreq.
          (KnownNat inFreq, KnownNat factor, KnownNat outFreq,
           outFreq ~ FreqMult inFreq factor)

@@ -22,7 +22,6 @@ module VHDL.Analysis.MultiFile
 import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map
 import Data.Maybe (mapMaybe)
-import Data.Text (Text)
 import qualified Data.Text as T
 import VHDL.AST
 
@@ -102,9 +101,9 @@ stripLibraryPrefix name =
 -- | Get port direction for a given entity and port name
 -- ADC-IMPLEMENTS: spellcraft-adc-029
 getPortDirection :: AnalysisContext -> Identifier -> Identifier -> Maybe PortDirection
-getPortDirection ctx entityName portName = do
-  entity <- lookupEntity ctx entityName
-  port <- findPort (entityPorts entity) portName
+getPortDirection ctx entName prtName = do
+  entity <- lookupEntity ctx entName
+  port <- findPort (entityPorts entity) prtName
   pure (portDirection port)
 
 -- | Find a port by name in a list of port declarations
@@ -117,8 +116,8 @@ findPort ports name =
 -- | Check if a port is an output port (out or inout)
 -- ADC-IMPLEMENTS: spellcraft-adc-029
 isOutputPort :: AnalysisContext -> Identifier -> Identifier -> Bool
-isOutputPort ctx entityName portName =
-  case getPortDirection ctx entityName portName of
+isOutputPort ctx entName prtName =
+  case getPortDirection ctx entName prtName of
     Just Output -> True
     Just InOut  -> True
     _           -> False

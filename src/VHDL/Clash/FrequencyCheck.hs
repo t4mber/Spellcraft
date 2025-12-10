@@ -85,6 +85,7 @@ data FrequencyCheckResult
 -- The output frequency must equal input frequency times the multiplication factor
 -- Contract: spellcraft-adc-006 Section: Safe Connection Functions
 -- Note: outFreq is computed as FreqMult inFreq factor using type-level arithmetic
+-- KnownNat (FreqMult inFreq factor) is needed to compute output frequency at runtime
 connectPLL :: forall inFreq factor a.
               (KnownNat inFreq, KnownNat factor, KnownNat (FreqMult inFreq factor))
            => PLL inFreq factor
@@ -125,6 +126,7 @@ connectEncoder encoder signal =
 -- | Safe clock divider connection
 -- Divides the frequency by a compile-time constant
 -- Note: divisor type parameter is used for compile-time frequency verification
+-- KnownNat outFreq is needed to compute output frequency at runtime
 connectClockDivider :: forall inFreq divisor outFreq a.
                        (KnownNat inFreq, KnownNat divisor, KnownNat outFreq,
                         outFreq ~ FreqDiv inFreq divisor)
