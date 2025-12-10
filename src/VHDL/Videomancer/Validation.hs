@@ -25,7 +25,7 @@ module VHDL.Videomancer.Validation
 
 import Data.Text (Text)
 import qualified Data.Text as T
-import Data.Maybe (catMaybes, mapMaybe, isNothing)
+import Data.Maybe (mapMaybe, catMaybes)
 import qualified Data.Map.Strict as Map
 import Data.Aeson (ToJSON)
 import GHC.Generics (Generic)
@@ -33,9 +33,7 @@ import VHDL.AST (VHDLDesign)
 import VHDL.Videomancer.Config
   ( ProgramConfig(..), ParameterConfig(..), ParameterType(..)
   , VideoTiming(..), AudioTiming(..), PipelineConstraint(..)
-  , VideoStandard(..), AudioStandard(..)
   )
-import qualified VHDL.Videomancer.Config as Config
 import VHDL.Videomancer.Constraint
 
 -- | Validation mode
@@ -199,7 +197,6 @@ checkTypeCompatibility param constraint =
 checkCompleteness :: [ParameterConfig] -> [ParameterConstraint] -> [ConstraintViolation]
 checkCompleteness params constraints =
   let paramNames = Map.fromList [(paramName p, p) | p <- params]
-      constraintNames = Map.fromList [(pcName c, c) | c <- constraints]
 
       -- Find constraints without matching params
       missingParams = mapMaybe (checkMissingParam paramNames) constraints

@@ -2,8 +2,10 @@
 {-# LANGUAGE AllowAmbiguousTypes #-}
 {-# LANGUAGE TypeApplications #-}
 {-# OPTIONS_GHC -Wno-partial-fields #-}
+{-# OPTIONS_GHC -Wno-redundant-constraints #-}
 -- Note: Partial fields warning suppressed for FrequencyCheckResult sum type
--- which uses different record fields per constructor by design
+-- which uses different record fields per constructor by design.
+-- KnownNat constraints appear redundant but are needed for natVal calls at runtime.
 
 -- ADC-IMPLEMENTS: spellcraft-adc-006
 module VHDL.Clash.FrequencyCheck

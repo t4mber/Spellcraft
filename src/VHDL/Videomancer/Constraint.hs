@@ -18,7 +18,6 @@ module VHDL.Videomancer.Constraint
 
 import Data.Aeson (ToJSON)
 import Data.Text (Text)
-import qualified Data.Text as T
 import GHC.Generics (Generic)
 import VHDL.AST
 import VHDL.SourceLocation
@@ -117,35 +116,20 @@ createConstraint gtype maybeDefault loc name =
 
 -- | Extract minimum value from VHDL type name
 extractMinFromType :: Text -> Maybe Value -> Maybe Double
-extractMinFromType typename _defaultVal =
+extractMinFromType _typename _defaultVal =
   -- For now, we can't extract range info from type names alone
   -- This would require a type database or parsing type definitions
   Nothing
 
 -- | Extract maximum value from VHDL type name
 extractMaxFromType :: Text -> Maybe Value -> Maybe Double
-extractMaxFromType typename _defaultVal =
+extractMaxFromType _typename _defaultVal =
   -- For now, we can't extract range info from type names alone
   -- This would require a type database or parsing type definitions
   Nothing
 
 -- | Extract bit width from VHDL type name
 extractBitWidth :: Text -> Maybe Int
-extractBitWidth typename =
+extractBitWidth _typename =
   -- Conservative: can't determine bit width from type name alone
   Nothing
-
--- | Convert VHDL Value to Double (best effort)
-valueToDouble :: Value -> Maybe Double
-valueToDouble val =
-  case val of
-    IntValue i -> Just (fromIntegral i)
-    RealValue r -> Just r
-    _ -> Nothing
-
--- | Convert VHDL Value to Int (best effort)
-valueToInt :: Value -> Maybe Int
-valueToInt val =
-  case val of
-    IntValue i -> Just (fromIntegral i)
-    _ -> Nothing

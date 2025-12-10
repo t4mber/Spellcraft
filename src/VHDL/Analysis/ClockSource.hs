@@ -9,10 +9,9 @@ module VHDL.Analysis.ClockSource
   , isClockLikeName
   ) where
 
-import Data.Char (toLower)
 import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map
-import Data.Maybe (mapMaybe, listToMaybe)
+import Data.Maybe (mapMaybe)
 import Data.Text (Text)
 import qualified Data.Text as T
 import VHDL.AST
@@ -27,7 +26,6 @@ import VHDL.Analysis.ClockGraph
   , ClockSource(..)
   )
 import VHDL.Analysis.FrequencyParser (parseFrequencyFromText)
-import VHDL.SourceLocation (SourceLocation(..), mkSourceLocation)
 
 -- | Detect clock sources from entity input ports
 -- Contract: spellcraft-adc-007 Section: Interface
@@ -94,10 +92,12 @@ updateFreqFromComments sourceText source =
 
 -- | Extract the line containing a port declaration (with potential comment)
 extractPortLine :: Text -> Text -> Maybe Text
-extractPortLine sourceText portName =
+extractPortLine sourceText prtName =
   let allLines = T.lines sourceText
-      matchingLines = filter (T.isInfixOf portName) allLines
-  in listToMaybe matchingLines
+      matchingLines = filter (T.isInfixOf prtName) allLines
+  in case matchingLines of
+       (x:_) -> Just x
+       [] -> Nothing
 
 -- | Assign initial frequencies to clock graph nodes from sources
 -- Contract: spellcraft-adc-007 Section: Interface

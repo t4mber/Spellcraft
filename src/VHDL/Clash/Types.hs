@@ -2,6 +2,8 @@
 {-# LANGUAGE AllowAmbiguousTypes #-}
 {-# LANGUAGE PolyKinds #-}
 {-# LANGUAGE TypeApplications #-}
+{-# OPTIONS_GHC -Wno-redundant-constraints #-}
+-- | KnownNat constraints appear redundant but are needed for natVal calls at runtime.
 
 -- ADC-IMPLEMENTS: spellcraft-adc-006
 module VHDL.Clash.Types
