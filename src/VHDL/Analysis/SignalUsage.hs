@@ -1,23 +1,26 @@
 {-# LANGUAGE OverloadedStrings #-}
 
 -- ADC-IMPLEMENTS: spellcraft-adc-012
+-- ADC-IMPLEMENTS: spellcraft-adc-029
 module VHDL.Analysis.SignalUsage
   ( -- * Signal Usage Analysis
     SignalInfo(..)
   , SignalViolation(..)
   , analyzeSignalUsage
+  , analyzeSignalUsageWithContext
   , collectSignalDecls
   , collectSignalAssignments
+  , collectSignalAssignmentsWithContext
   , collectSignalReads
   ) where
 
 import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map
+import Data.Maybe (mapMaybe)
 import Data.Set (Set)
 import qualified Data.Set as Set
 import Data.Text (Text)
 import qualified Data.Text as Text
-import Debug.Trace (trace)
 import VHDL.AST
 import VHDL.SourceLocation (SourceLocation)
 
@@ -49,9 +52,17 @@ data SignalViolation
 -- | Analyze architecture for signal usage violations
 -- Contract: spellcraft-adc-012 Section: Signal Usage Tracker
 analyzeSignalUsage :: Architecture -> [SignalViolation]
-analyzeSignalUsage arch =
+analyzeSignalUsage arch = analyzeSignalUsageWithContext emptyContext arch
+
+-- | Analyze architecture for signal usage violations with multi-file context
+-- ADC-IMPLEMENTS: spellcraft-adc-029
+--
+-- When a context is provided, component instantiation output ports are
+-- resolved using actual entity definitions instead of heuristics.
+analyzeSignalUsageWithContext :: AnalysisContext -> Architecture -> [SignalViolation]
+analyzeSignalUsageWithContext ctx arch =
   let signals = collectSignalDecls arch
-      assignments = collectSignalAssignments arch
+      assignments = collectSignalAssignmentsWithContext ctx arch
       reads = collectSignalReads arch
 
       -- Check for undriven signals (declared but never assigned)
@@ -95,17 +106,22 @@ collectSignalDecls arch =
 -- | Collect all signal assignments from architecture statements
 -- Contract: spellcraft-adc-012 Section: Signal Usage Tracker
 collectSignalAssignments :: Architecture -> Map Identifier [SourceLocation]
-collectSignalAssignments arch =
-  trace ("collectSignalAssignments: architecture has " ++ show (length $ archStatements arch) ++ " statements") $
-  let stmtAssignments = concatMap collectFromArchStatement (archStatements arch)
-      result = Map.fromListWith (++) stmtAssignments
-  in trace ("collectSignalAssignments: found " ++ show (Map.size result) ++ " assigned signals: " ++ show (Map.keys result)) result
+collectSignalAssignments arch = collectSignalAssignmentsWithContext emptyContext arch
+
+-- | Collect all signal assignments with multi-file context
+-- ADC-IMPLEMENTS: spellcraft-adc-029
+--
+-- When context is provided, component output ports are resolved using
+-- actual entity definitions instead of heuristics.
+collectSignalAssignmentsWithContext :: AnalysisContext -> Architecture -> Map Identifier [SourceLocation]
+collectSignalAssignmentsWithContext ctx arch =
+  let stmtAssignments = concatMap (collectFromArchStatementWithContext ctx) (archStatements arch)
+  in Map.fromListWith (++) stmtAssignments
 
 -- | Collect assignments from an architecture statement
 collectFromArchStatement :: ArchStatement -> [(Identifier, [SourceLocation])]
-collectFromArchStatement (ProcessStmt _ _ stmts loc) =
+collectFromArchStatement (ProcessStmt _ _ stmts _loc) =
   -- Collect assignments from process statements
-  trace ("collectFromArchStatement (ProcessStmt): found " ++ show (length stmts) ++ " statements") $
   concatMap collectFromSeqStatement stmts
 collectFromArchStatement (ConcurrentAssignment target _ loc) =
   -- ADC-IMPLEMENTS: spellcraft-adc-022
@@ -120,17 +136,91 @@ collectFromArchStatement (ComponentInstStmt inst) =
   -- Full solution requires parsing component entity declarations
   let portMaps = compPortMap inst
       outputPorts = filter isLikelyOutputPort portMaps
-      assignments = [ (targetSignal, [compLocation inst])
-                    | (_, expr) <- outputPorts
-                    , Just targetSignal <- [targetToSignalName expr]
-                    ]
-  in trace ("collectFromArchStatement (ComponentInstStmt): found " ++ show (length assignments) ++ " output port assignments") assignments
+  in [ (targetSignal, [compLocation inst])
+     | (_, expr) <- outputPorts
+     , Just targetSignal <- [targetToSignalName expr]
+     ]
 -- ADC-IMPLEMENTS: spellcraft-adc-028
 -- Handle generate statements by recursively collecting from nested statements
 collectFromArchStatement (GenerateStmt genStmt) =
-  let nestedStmts = genStatements genStmt
-      assignments = concatMap collectFromArchStatement nestedStmts
-  in trace ("collectFromArchStatement (GenerateStmt): found " ++ show (length assignments) ++ " nested assignments") assignments
+  concatMap collectFromArchStatement (genStatements genStmt)
+
+-- | Collect assignments from an architecture statement with multi-file context
+-- ADC-IMPLEMENTS: spellcraft-adc-029
+collectFromArchStatementWithContext :: AnalysisContext -> ArchStatement -> [(Identifier, [SourceLocation])]
+collectFromArchStatementWithContext _ctx (ProcessStmt _ _ stmts _loc) =
+  -- Collect assignments from process statements (context not needed)
+  concatMap collectFromSeqStatement stmts
+collectFromArchStatementWithContext _ctx (ConcurrentAssignment target _ loc) =
+  -- ADC-IMPLEMENTS: spellcraft-adc-022
+  -- Target is now an Expression, extract base signal name (context not needed)
+  case targetToSignalName target of
+    Just name -> [(name, [loc])]
+    Nothing -> []  -- Complex target without clear signal name
+collectFromArchStatementWithContext ctx (ComponentInstStmt inst) =
+  -- ADC-IMPLEMENTS: spellcraft-adc-029
+  -- Try to resolve component outputs using context first
+  -- Fall back to heuristic if entity is not found
+  let compName = compComponentName inst
+      portMaps = compPortMap inst
+      -- Try context-based resolution first
+      contextOutputs = getOutputPortsFromContext ctx compName portMaps
+  in if null contextOutputs
+     then
+       -- Fall back to heuristic for unknown components
+       let outputPorts = filter isLikelyOutputPort portMaps
+       in [ (targetSignal, [compLocation inst])
+          | (_, expr) <- outputPorts
+          , Just targetSignal <- [targetToSignalName expr]
+          ]
+     else
+       contextOutputs
+-- ADC-IMPLEMENTS: spellcraft-adc-028
+-- Handle generate statements by recursively collecting from nested statements
+collectFromArchStatementWithContext ctx (GenerateStmt genStmt) =
+  concatMap (collectFromArchStatementWithContext ctx) (genStatements genStmt)
+
+-- | Get output ports from context using entity definitions
+-- ADC-IMPLEMENTS: spellcraft-adc-029
+getOutputPortsFromContext :: AnalysisContext -> Identifier -> [(Expression, Expression)] -> [(Identifier, [SourceLocation])]
+getOutputPortsFromContext ctx compName portMaps =
+  case lookupEntityInContext ctx compName of
+    Nothing -> []  -- Entity not in context, return empty to trigger fallback
+    Just entity ->
+      let outputPortNames = [portName p | p <- entityPorts entity, isOutputDirection (portDirection p)]
+          -- Match port map entries to output ports
+          matchedOutputs = mapMaybe (matchOutputPort outputPortNames) portMaps
+      in matchedOutputs
+  where
+    isOutputDirection Output = True
+    isOutputDirection InOut = True
+    isOutputDirection Input = False
+
+-- | Match a port map entry to an output port
+matchOutputPort :: [Identifier] -> (Expression, Expression) -> Maybe (Identifier, [SourceLocation])
+matchOutputPort outputNames (formalExpr, actualExpr) = do
+  formalName <- formalToIdentifier formalExpr
+  if formalName `elem` outputNames
+    then do
+      targetSignal <- targetToSignalName actualExpr
+      pure (targetSignal, [])  -- Location will be filled in by caller
+    else Nothing
+
+-- | Look up an entity in the context
+-- ADC-IMPLEMENTS: spellcraft-adc-029
+-- Handles both bare names ("contrast_u") and qualified names ("work.contrast_u")
+lookupEntityInContext :: AnalysisContext -> Identifier -> Maybe Entity
+lookupEntityInContext ctx name =
+  let normalizedName = stripLibraryPrefix name
+  in Map.lookup normalizedName (ctxEntities ctx)
+
+-- | Strip library prefix from entity name
+-- "work.contrast_u" -> "contrast_u"
+stripLibraryPrefix :: Identifier -> Identifier
+stripLibraryPrefix name =
+  case Text.breakOn "." name of
+    (_, rest) | Text.null rest -> name  -- No dot, return as-is
+    (_, rest) -> Text.drop 1 rest       -- Drop the dot and return the rest
 
 -- | Extract identifier from a formal expression
 -- ADC-IMPLEMENTS: spellcraft-adc-027

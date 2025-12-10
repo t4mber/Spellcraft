@@ -3,6 +3,7 @@
 
 -- ADC-IMPLEMENTS: spellcraft-adc-005
 -- ADC-IMPLEMENTS: spellcraft-adc-014 Section: Report Updates
+-- ADC-IMPLEMENTS: spellcraft-adc-029
 module VHDL.CLI.Report
   ( -- * Reports
     AnalysisReport(..)
@@ -18,8 +19,7 @@ import qualified Data.Text.Lazy as TL
 import qualified Data.Text.Lazy.Encoding as TLE
 import GHC.Generics (Generic)
 import System.Exit (ExitCode(..))
-import System.IO (hFlush, stdout, stderr)
-import Debug.Trace (trace, traceIO)
+import System.IO (hFlush, stdout)
 import VHDL.Analysis.Combinatorial (ComplexityWarning)
 import VHDL.CLI.Color (green, red, yellow)
 import VHDL.CLI.Format
@@ -32,17 +32,17 @@ import VHDL.Constraint.Types (ConstraintViolation(..), Severity(..), violationSe
 import VHDL.Constraint.Library (ComponentLibrary)
 import VHDL.Parser (ParseError, parseVHDLFile)
 import ComponentLibs.TestComponents (testComponentLibrary)
-import VHDL.Analysis.ClockGraph (buildClockGraph, ClockGraph(..), cgNodes, cgEdges, cgSources, ClockNode(..), ClockEdge(..), ClockSource(..))
+import VHDL.Analysis.ClockGraph (buildClockGraph)
 import VHDL.Analysis.Propagation (propagateFrequencies)
 import VHDL.Analysis.Violation (detectFrequencyViolations)
 import VHDL.Analysis.ClashFile (analyzeClashFile, ClashAnalysisResult(..), ClashViolation(..), clashViolationToConstraint)
-import VHDL.Analysis.SignalUsage (analyzeSignalUsage, SignalViolation(..), violationSignal, violationLocation, violationType)
+import VHDL.Analysis.SignalUsage (analyzeSignalUsageWithContext, SignalViolation(..), violationSignal, violationLocation, violationType)
+import VHDL.Analysis.MultiFile (buildContext)
 import VHDL.Analysis.ControlFlow (analyzeControlFlow, ControlFlowViolation(..), latchSignal, latchLocation, latchDescription)
 import VHDL.Analysis.ArithmeticBounds (checkArithmeticBounds, ArithmeticViolation(..))
 import VHDL.AST (VHDLDesign, designArchitectures)
-import VHDL.SourceLocation (mkSourceLocation, SourceLocation(..))
+import VHDL.SourceLocation (SourceLocation(..))
 import System.FilePath (takeExtension)
-import qualified Data.Map.Strict as Map
 
 -- | Analysis report
 -- Contract: spellcraft-adc-005 Section: Interface
@@ -60,15 +60,15 @@ instance ToJSON AnalysisReport
 -- Contract: spellcraft-adc-005 Section: Interface
 runAnalysis :: CliOptions -> IO ExitCode
 runAnalysis opts = do
-  putStrLn "=== runAnalysis CALLED ===" >> hFlush stdout
   when (optVerbose opts) $
     TIO.putStrLn "[INFO] Starting hardware design analysis..."
 
   -- Separate files by type
   let (vhdlFiles, clashFiles) = partitionFiles (optInputFiles opts)
 
-  putStrLn ("\n=== Analyzing Files: " ++ show (optInputFiles opts)) >> hFlush stdout
-  putStrLn ("VHDL files: " ++ show (length vhdlFiles) ++ ", Clash files: " ++ show (length clashFiles)) >> hFlush stdout
+  when (optVerbose opts) $ do
+    putStrLn ("[INFO] Analyzing Files: " ++ show (optInputFiles opts)) >> hFlush stdout
+    putStrLn ("[INFO] VHDL files: " ++ show (length vhdlFiles) ++ ", Clash files: " ++ show (length clashFiles)) >> hFlush stdout
 
   -- Parse VHDL files
   vhdlResults <- mapM parseVHDLFile vhdlFiles
@@ -79,9 +79,10 @@ runAnalysis opts = do
   clashResults <- mapM analyzeClashFile clashFiles
   let clashViolations = concatMap extractClashViolations clashResults
 
-  putStrLn ("Parse results - VHDL errors: " ++ show (length parseErrors) ++
-            ", designs: " ++ show (length designs) ++
-            ", Clash violations: " ++ show (length clashViolations)) >> hFlush stdout
+  when (optVerbose opts) $
+    putStrLn ("[INFO] Parse results - VHDL errors: " ++ show (length parseErrors) ++
+              ", designs: " ++ show (length designs) ++
+              ", Clash violations: " ++ show (length clashViolations)) >> hFlush stdout
 
   -- Run constraint analysis on VHDL designs
   -- Contract: spellcraft-adc-005 Section: Interface
@@ -221,13 +222,17 @@ printWarning fmt warning = do
 
 -- | Analyze designs for constraint violations
 -- Contract: spellcraft-adc-005 Section: Interface
+-- ADC-IMPLEMENTS: spellcraft-adc-029
+-- Now builds multi-file context from all designs for cross-file resolution
 analyzeDesigns :: [VHDLDesign] -> ComponentLibrary -> [ConstraintViolation]
-analyzeDesigns designs lib = concatMap analyzeDesign designs
+analyzeDesigns designs lib =
+  -- ADC-029: Build multi-file analysis context from all designs
+  let ctx = buildContext designs
+  in concatMap (analyzeDesign ctx) designs
   where
-    analyzeDesign design =
-      trace ("\n=== Starting Design Analysis ===") $
-      -- Signal usage analysis (ADC-012 Priority 1)
-      let signalViolations = concatMap analyzeSignalUsage (designArchitectures design)
+    analyzeDesign ctx design =
+      -- Signal usage analysis with multi-file context (ADC-012 Priority 1, ADC-029)
+      let signalViolations = concatMap (analyzeSignalUsageWithContext ctx) (designArchitectures design)
           signalConstraints = map signalViolationToConstraint signalViolations
           -- Control flow analysis (ADC-012 Priority 2)
           controlViolations = concatMap analyzeControlFlow (designArchitectures design)
@@ -237,31 +242,16 @@ analyzeDesigns designs lib = concatMap analyzeDesign designs
           arithmeticConstraints = map arithmeticViolationToConstraint arithmeticViolations
           -- All ADC-012 violations combined
           allAdc012Constraints = signalConstraints ++ controlConstraints ++ arithmeticConstraints
-      in trace ("\n=== Signal Usage Analysis ===" ++
-               "\nSignal violations: " ++ show (length signalViolations) ++
-               "\nControl flow violations: " ++ show (length controlViolations) ++
-               "\nArithmetic violations: " ++ show (length arithmeticViolations)) $
-      case buildClockGraph design lib of
-        Left err ->
-          trace ("Graph building ERROR: " ++ show err) allAdc012Constraints
+      in case buildClockGraph design lib of
+        Left _err ->
+          allAdc012Constraints
         Right clockGraph ->
-          let sourceInfo = unlines [show s | s <- cgSources clockGraph]
-              edgeInfo = unlines [show e | e <- cgEdges clockGraph]
-              nodesBefore = unlines [show (cnSignal n, cnFrequency n) | n <- Map.elems (cgNodes clockGraph)]
-          in trace ("\n=== Clock Graph Built ===" ++
-                    "\nSources:\n" ++ sourceInfo ++
-                    "\nEdges:\n" ++ edgeInfo ++
-                    "\nNodes before propagation:\n" ++ nodesBefore) $
           case propagateFrequencies clockGraph lib of
-            Left err ->
-              trace ("Propagation error: " ++ show err) allAdc012Constraints
+            Left _err ->
+              allAdc012Constraints
             Right propagatedGraph ->
-              let nodesAfter = unlines [show (cnSignal n, cnFrequency n) | n <- Map.elems (cgNodes propagatedGraph)]
-                  freqViolations = detectFrequencyViolations propagatedGraph lib
-                  allViolations = allAdc012Constraints ++ freqViolations
-              in trace ("\n=== After Propagation ===" ++
-                       "\nNodes:\n" ++ nodesAfter ++
-                       "\nViolations: " ++ show allViolations) allViolations
+              let freqViolations = detectFrequencyViolations propagatedGraph lib
+              in allAdc012Constraints ++ freqViolations
 
 -- | Convert signal usage violation to constraint violation
 -- Contract: spellcraft-adc-012 Section: Signal Usage Tracker
