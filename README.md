@@ -179,6 +179,31 @@ spellcraft/
 └── docs/                            # Documentation
 ```
 
+## CI/CD Integration
+
+Spellcraft includes GitHub Actions workflows for automated analysis. See [`.github/README.md`](.github/README.md) for full documentation.
+
+### Quick Start
+
+```yaml
+# .github/workflows/analyze.yml
+- name: Analyze VHDL
+  run: stack exec spellcraft -- --format=json src/*.vhd > report.json
+
+- name: Upload SARIF to GitHub Security
+  uses: github/codeql-action/upload-sarif@v3
+  with:
+    sarif_file: results.sarif
+```
+
+### Export Formats
+
+| Format | Use Case |
+|--------|----------|
+| `--format=text` | Human-readable output (default) |
+| `--format=json` | CI pipelines, custom tooling |
+| `--format=sarif` | GitHub Code Scanning integration |
+
 ## Philosophy: Hardware as Spellcraft
 
 Just as a wizard carefully crafts each spell with precise incantations and components, hardware engineers craft designs with careful attention to physical constraints. Spellcraft helps you:

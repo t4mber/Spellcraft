@@ -1,0 +1,174 @@
+name: Spellcraft CI
+
+on:
+  push:
+    branches: [main, master, release/*]
+  pull_request:
+    branches: [main, master]
+  workflow_dispatch:
+
+jobs:
+  build:
+    name: Build & Test
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Haskell
+        uses: haskell-actions/setup@v2
+        with:
+          ghc-version: '9.10.3'
+          enable-stack: true
+          stack-version: 'latest'
+
+      - name: Cache Stack
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.stack
+            .stack-work
+          key: ${{ runner.os }}-stack-${{ hashFiles('stack.yaml.lock', 'package.yaml') }}
+          restore-keys: |
+            ${{ runner.os }}-stack-
+
+      - name: Build
+        run: stack build --fast
+
+      - name: Run Tests
+        run: stack test --fast
+
+  analyze-contrib:
+    name: Analyze Contrib Examples
+    runs-on: ubuntu-latest
+    needs: build
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Haskell
+        uses: haskell-actions/setup@v2
+        with:
+          ghc-version: '9.10.3'
+          enable-stack: true
+          stack-version: 'latest'
+
+      - name: Cache Stack
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.stack
+            .stack-work
+          key: ${{ runner.os }}-stack-${{ hashFiles('stack.yaml.lock', 'package.yaml') }}
+          restore-keys: |
+            ${{ runner.os }}-stack-
+
+      - name: Build Spellcraft
+        run: stack build --fast
+
+      - name: Create reports directory
+        run: mkdir -p reports
+
+      - name: Analyze LZX Lumarian
+        run: |
+          stack exec spellcraft -- --format=json contrib/lzx/lumarian/*.vhd > reports/lumarian.json 2>&1 || true
+        continue-on-error: true
+
+      - name: Analyze LZX Mirrorbound
+        run: |
+          stack exec spellcraft -- --format=json contrib/lzx/mirrorbound/*.vhd > reports/mirrorbound.json 2>&1 || true
+        continue-on-error: true
+
+      - name: Analyze LZX KAOS
+        run: |
+          stack exec spellcraft -- --format=json contrib/lzx-kaos/*.vhd > reports/lzx-kaos.json 2>&1 || true
+        continue-on-error: true
+
+      - name: Analyze Codeglow (if VHDL exists)
+        run: |
+          if ls contrib/t4mber/codeglow/*.vhd 1> /dev/null 2>&1; then
+            stack exec spellcraft -- --format=json contrib/t4mber/codeglow/*.vhd > reports/codeglow.json 2>&1 || true
+          else
+            echo '{"message": "No VHDL files in codeglow"}' > reports/codeglow.json
+          fi
+        continue-on-error: true
+
+      - name: Generate Combined Report
+        run: |
+          echo '{"generated_at": "'$(date -u +%Y-%m-%dT%H:%M:%SZ)'", "reports": {' > reports/combined.json
+          first=true
+          for f in reports/*.json; do
+            if [ "$f" != "reports/combined.json" ]; then
+              name=$(basename "$f" .json)
+              if [ "$first" = true ]; then
+                first=false
+              else
+                echo ',' >> reports/combined.json
+              fi
+              echo "\"$name\": $(cat "$f")" >> reports/combined.json
+            fi
+          done
+          echo '}}' >> reports/combined.json
+
+      - name: Upload Analysis Reports
+        uses: actions/upload-artifact@v4
+        with:
+          name: spellcraft-reports
+          path: reports/
+          retention-days: 30
+
+      - name: Display Report Summary
+        run: |
+          echo "=== Spellcraft Analysis Summary ==="
+          for f in reports/*.json; do
+            if [ "$f" != "reports/combined.json" ]; then
+              name=$(basename "$f" .json)
+              echo "--- $name ---"
+              cat "$f" | head -50
+              echo ""
+            fi
+          done
+
+  sarif-upload:
+    name: Upload SARIF to GitHub
+    runs-on: ubuntu-latest
+    needs: build
+    if: github.event_name == 'push'
+    permissions:
+      security-events: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Haskell
+        uses: haskell-actions/setup@v2
+        with:
+          ghc-version: '9.10.3'
+          enable-stack: true
+          stack-version: 'latest'
+
+      - name: Cache Stack
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.stack
+            .stack-work
+          key: ${{ runner.os }}-stack-${{ hashFiles('stack.yaml.lock', 'package.yaml') }}
+          restore-keys: |
+            ${{ runner.os }}-stack-
+
+      - name: Build Spellcraft
+        run: stack build --fast
+
+      - name: Generate SARIF Report
+        run: |
+          stack exec spellcraft -- --format=sarif contrib/lzx/lumarian/*.vhd contrib/lzx/mirrorbound/*.vhd > results.sarif 2>&1 || true
+
+      - name: Upload SARIF to GitHub Security
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: results.sarif
+        continue-on-error: true
