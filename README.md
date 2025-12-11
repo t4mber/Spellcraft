@@ -179,9 +179,24 @@ spellcraft/
 └── docs/                            # Documentation
 ```
 
+## Philosophy: Hardware as Spellcraft
+
+Just as a wizard carefully crafts each spell with precise incantations and components, hardware engineers craft designs with careful attention to physical constraints. Spellcraft helps you:
+
+- **Learn the craft**: Clear error messages guide you toward correct designs
+- **Catch mistakes early**: Find constraint violations before synthesis
+- **Build confidence**: Type-level guarantees where possible
+- **Understand tradeoffs**: See exactly where and why constraints are violated
+
+## License
+
+BSD-3-Clause
+
+---
+
 ## CI/CD Integration
 
-Spellcraft includes GitHub Actions workflows for automated analysis. See [`.github/README.md`](.github/README.md) for full documentation.
+Spellcraft includes GitHub Actions workflows for automated analysis. See [`.github/CI.md`](.github/CI.md) for full documentation.
 
 ### Quick Start
 
@@ -203,16 +218,3 @@ Spellcraft includes GitHub Actions workflows for automated analysis. See [`.gith
 | `--format=text` | Human-readable output (default) |
 | `--format=json` | CI pipelines, custom tooling |
 | `--format=sarif` | GitHub Code Scanning integration |
-
-## Philosophy: Hardware as Spellcraft
-
-Just as a wizard carefully crafts each spell with precise incantations and components, hardware engineers craft designs with careful attention to physical constraints. Spellcraft helps you:
-
-- **Learn the craft**: Clear error messages guide you toward correct designs
-- **Catch mistakes early**: Find constraint violations before synthesis
-- **Build confidence**: Type-level guarantees where possible
-- **Understand tradeoffs**: See exactly where and why constraints are violated
-
-## License
-
-BSD-3-Clause
