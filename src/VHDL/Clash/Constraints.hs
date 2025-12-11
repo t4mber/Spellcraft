@@ -2,6 +2,9 @@
 {-# LANGUAGE AllowAmbiguousTypes #-}
 {-# LANGUAGE ConstraintKinds #-}
 {-# LANGUAGE TypeApplications #-}
+{-# OPTIONS_GHC -Wno-partial-fields #-}
+-- Note: Partial fields warning suppressed for ConstraintCheck and ConstraintResult
+-- sum types which use different record fields per constructor by design
 
 -- ADC-IMPLEMENTS: spellcraft-adc-006
 module VHDL.Clash.Constraints
@@ -28,28 +31,23 @@ module VHDL.Clash.Constraints
 
 import Data.Text (Text)
 import qualified Data.Text as T
-import GHC.TypeLits (Nat, KnownNat)
-import GHC.TypeNats (type (<=?))
+import GHC.TypeLits (KnownNat)
 import Data.Kind (Constraint)
-import Data.Proxy (Proxy(..))
 import VHDL.Clash.Types
   ( FreqMHz
-  , ClockDomain(..)
   , HWSignal(..)
-  , Encoder(..)
   , natToInteger
   )
 import VHDL.Clash.FrequencyCheck
   ( CheckMaxFreq
   , CheckMinFreq
-  , FrequencyCheckResult(..)
   )
 import VHDL.Constraint.Types
   ( ComponentSpec(..)
   , PortConstraint(..)
   , ConstraintViolation(..)
   )
-import VHDL.SourceLocation (SourceLocation, mkSourceLocation)
+import VHDL.SourceLocation (mkSourceLocation)
 
 -- | General hardware constraint kind
 -- Contract: spellcraft-adc-006 Section: Type-Level Constraint Checking
@@ -111,47 +109,46 @@ validateSingleCheck :: forall freq a.
                     => HWSignal freq a
                     -> ConstraintCheck
                     -> ConstraintResult
-validateSingleCheck signal check =
-  let actualFreq = natToInteger @freq
+validateSingleCheck _signal check =
+  let freqVal = natToInteger @freq
   in case check of
-    FrequencyCheck name actual minM maxM ->
-      if actualFreq /= actual
+    FrequencyCheck _name actual minM maxM ->
+      if freqVal /= actual
       then ConstraintViolated check "Frequency mismatch"
       else case (minM, maxM) of
         (Just minF, Just maxF) ->
-          if actualFreq >= minF && actualFreq <= maxF
+          if freqVal >= minF && freqVal <= maxF
           then ConstraintSatisfied check
           else ConstraintViolated check $
-            "Frequency " <> T.pack (show actualFreq)
+            "Frequency " <> T.pack (show freqVal)
             <> " MHz outside range [" <> T.pack (show minF)
             <> ", " <> T.pack (show maxF) <> "] MHz"
         (Just minF, Nothing) ->
-          if actualFreq >= minF
+          if freqVal >= minF
           then ConstraintSatisfied check
           else ConstraintViolated check $
-            "Frequency " <> T.pack (show actualFreq)
+            "Frequency " <> T.pack (show freqVal)
             <> " MHz below minimum " <> T.pack (show minF) <> " MHz"
         (Nothing, Just maxF) ->
-          if actualFreq <= maxF
+          if freqVal <= maxF
           then ConstraintSatisfied check
           else ConstraintViolated check $
-            "Frequency " <> T.pack (show actualFreq)
+            "Frequency " <> T.pack (show freqVal)
             <> " MHz above maximum " <> T.pack (show maxF) <> " MHz"
         (Nothing, Nothing) ->
           ConstraintSatisfied check
-    PowerCheck name actual maxPower ->
-      if actualFreq <= maxPower
+    PowerCheck _name _actual maxPower ->
+      if freqVal <= maxPower
       then ConstraintSatisfied check
       else ConstraintViolated check $
-        "Frequency " <> T.pack (show actualFreq)
+        "Frequency " <> T.pack (show freqVal)
         <> " MHz exceeds power limit " <> T.pack (show maxPower) <> " MHz"
     CustomCheck _ _ ->
       ConstraintSatisfied check  -- Custom checks require external validation
 
 -- | Check frequency constraint for a signal
 checkFrequencyConstraint :: forall freq minFreq maxFreq a.
-                            (KnownNat freq, KnownNat minFreq, KnownNat maxFreq,
-                             FrequencyConstraint freq minFreq maxFreq)
+                            (KnownNat freq, KnownNat minFreq, KnownNat maxFreq)
                          => HWSignal freq a
                          -> Either ConstraintViolation ()
 checkFrequencyConstraint signal =
@@ -170,8 +167,7 @@ checkFrequencyConstraint signal =
 
 -- | Check power constraint for a signal
 checkPowerConstraint :: forall freq maxFreq a.
-                        (KnownNat freq, KnownNat maxFreq,
-                         PowerConstraint freq maxFreq)
+                        (KnownNat freq, KnownNat maxFreq)
                      => HWSignal freq a
                      -> Either ConstraintViolation ()
 checkPowerConstraint signal =
@@ -218,7 +214,7 @@ satisfiesAny = any isSatisfied
 -- Contract: spellcraft-adc-006 Section: Integration
 toViolation :: ConstraintResult -> Maybe ConstraintViolation
 toViolation (ConstraintSatisfied _) = Nothing
-toViolation (ConstraintViolated check reason) =
+toViolation (ConstraintViolated check _reason) =
   Just $ case check of
     FrequencyCheck name actual _ (Just maxF) ->
       FrequencyViolation
@@ -255,12 +251,12 @@ fromComponentSpec spec =
     portToCheck :: PortConstraint -> ConstraintCheck
     portToCheck portConstraint =
       case portConstraintMaxFreq portConstraint of
-        Just maxFreq ->
+        Just maxFreqVal ->
           FrequencyCheck
             { checkName = compSpecName spec
             , checkActual = 0  -- Must be filled at runtime
             , checkMin = Nothing
-            , checkMax = Just (round maxFreq)
+            , checkMax = Just (round maxFreqVal)
             }
         Nothing ->
           CustomCheck

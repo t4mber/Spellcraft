@@ -5,6 +5,93 @@ All notable changes to the Spellcraft will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.8.0] - 2025-12-07
+
+### Added - Enhanced Videomancer & CI/CD Integration
+
+#### Enhanced Video Timing Standards (ADC-030)
+- **Added:** 4K UHD timing support (3840x2160 @ 60Hz, 594 MHz pixel clock)
+- **Added:** 4K 120Hz support (3840x2160 @ 120Hz, 1188 MHz pixel clock)
+- **Added:** 8K UHD timing support (7680x4320 @ 60Hz, 2376 MHz pixel clock)
+- **Added:** 8K 120Hz support (7680x4320 @ 120Hz, 4752 MHz pixel clock)
+- **Added:** DCI 4K Cinema timing (4096x2160 @ 24Hz)
+- **Added:** HDR metadata timing constraints (HDR10, HDR10+, Dolby Vision, HLG)
+- **Added:** Complete SD/HD timing library (480i, 576i, 720p, 1080i, 1080p)
+- **Types:** `VideoStandard`, `VideoTiming`, `HDRMetadata`
+- **Files:** `src/VHDL/Videomancer/Config.hs`
+
+#### Audio Timing Validation (ADC-030)
+- **Added:** PCM audio timing (48kHz, 96kHz, 192kHz sample rates)
+- **Added:** I2S timing constraints (BCLK, LRCLK, MCLK relationships)
+- **Added:** S/PDIF and AES3 professional audio timing
+- **Added:** HDMI embedded audio timing (up to 8 channels)
+- **Added:** Audio latency validation
+- **Types:** `AudioStandard`, `AudioTiming`
+- **Functions:** `validateAudioTiming`, `audioTimingFor`
+- **Files:** `src/VHDL/Videomancer/Config.hs`, `src/VHDL/Videomancer/Validation.hs`
+
+#### Pipeline Constraint Checking (ADC-030)
+- **Added:** Pipeline stage latency validation
+- **Added:** Throughput constraint checking (Mega-pixels per second)
+- **Added:** Buffer depth and FIFO sizing validation
+- **Types:** `PipelineConstraint`, `TimingViolation`, `TimingValidationResult`
+- **Functions:** `validatePipelineConstraints`, `validateVideoTiming`
+- **Files:** `src/VHDL/Videomancer/Validation.hs`
+
+#### Report Export Formats (ADC-031)
+- **Added:** JSON report format for CI/CD integration
+- **Added:** SARIF 2.1.0 format for IDE/GitHub integration
+- **Added:** `--output-format=sarif` CLI flag
+- **Added:** `--output-format=json` enhanced with structured violation data
+- **Added:** SARIF rule IDs (SPELL000-SPELL005) for violation categorization
+- **Impact:** Native integration with GitHub Code Scanning and VSCode
+- **Files:** `src/VHDL/CLI/Export.hs` (new), `src/VHDL/CLI/Options.hs`, `src/VHDL/CLI/Report.hs`
+
+#### KAOS ELF Level 4 - The Dimensional Rift
+- **Added:** Level 4 CDC (Clock Domain Crossing) test case
+- **Added:** Metastability violation pattern documentation
+- **Added:** 2-FF synchronizer pattern examples
+- **Files:** `test/fixtures/kaos-elf/level4-cdc.vhd`
+- **Documentation:** `test/fixtures/kaos-elf/README.md` updated
+
+### Changed
+
+#### CLI Improvements
+- **Changed:** `--format` now accepts `sarif` in addition to `human`, `json`, `gcc`
+- **Added:** `--output-format` as alias for `--format`
+- **Added:** `text` as alias for `human` format
+
+#### Test Infrastructure
+- **Fixed:** Added missing test modules to spellcraft.cabal
+- **Added:** `VHDL.Parser.WorkLibrarySpec` to test suite
+- **Added:** `VHDL.Analysis.MultiFileSpec` to test suite
+- **Added:** `hspec-discover` dependency for automatic test discovery
+
+### Contract References
+
+**New Contracts:**
+- ADC-030: Video/Audio Timing Standards
+- ADC-031: Report Export Formats
+
+**Updated Contracts:**
+- ADC-010: Videomancer Configuration (extended with timing standards)
+- ADC-011: KAOS ELF Framework (Level 4 added)
+
+### Usage Examples
+
+```bash
+# Export as SARIF for GitHub Code Scanning
+spellcraft --format=sarif src/*.vhd > results.sarif
+
+# Export as JSON for CI/CD pipelines
+spellcraft --output-format=json src/*.vhd > results.json
+
+# Run Level 4 CDC test
+spellcraft test/fixtures/kaos-elf/level4-cdc.vhd
+```
+
+---
+
 ## [0.6.0] - 2025-12-04
 
 ### Added - Violation Detection & Warning Infrastructure 🎯

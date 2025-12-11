@@ -10,13 +10,10 @@ module VHDL.Analysis.ClashFile
   ) where
 
 import qualified Data.Text as T
-import qualified Data.Text.IO as TIO
 import Data.Text (Text)
 import System.Process (readProcessWithExitCode)
-import System.Exit (ExitCode(..))
 import Control.Exception (try, SomeException)
 import Text.Read (readMaybe)
-import Debug.Trace (trace)
 import VHDL.Constraint.Types (ConstraintViolation(..))
 import VHDL.SourceLocation (SourceLocation, mkSourceLocation)
 
@@ -43,7 +40,7 @@ analyzeClashFile filePath = do
   case result of
     Left (e :: SomeException) ->
       pure $ Left $ "Failed to run stack ghc: " ++ show e
-    Right (exitCode, stdout, stderr) -> do
+    Right (_exitCode, stdout, stderr) -> do
       let output = stdout ++ stderr
           violations = parseGHCErrors filePath output
       pure $ Right $ ClashAnalysisResult

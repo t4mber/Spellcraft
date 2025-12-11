@@ -52,6 +52,41 @@ s_accumulator <= s_accumulator + 1;  -- Grows without bound
 
 ---
 
+### Level 4: The Dimensional Rift
+**File:** `level4-cdc.vhd`
+**Violation:** Clock Domain Crossing without synchronization
+
+Signals that cross between clock domains without proper synchronizers create dimensional rifts in your design. The receiving flip-flop may capture a metastable value — neither 0 nor 1, but an unstable state that resolves unpredictably.
+
+```vhdl
+-- Fast domain (200 MHz)
+s_data_crossing <= data_in;
+
+-- Slow domain (50 MHz) - THE RIFT!
+s_data_slow <= s_data_crossing;  -- No synchronizer!
+```
+
+**The Curse of Metastability:**
+- Signal oscillates between logic levels
+- May resolve to wrong value
+- Corrupts downstream logic
+- Only manifests on real hardware, often passes simulation
+
+**The Proper Incantation (2-FF Synchronizer):**
+```vhdl
+process(clk_slow)
+begin
+  if rising_edge(clk_slow) then
+    sync_ff1 <= async_signal;  -- May go metastable
+    sync_ff2 <= sync_ff1;      -- Settles to stable value
+  end if;
+end process;
+```
+
+**Detection:** Clock domain analysis, signal tracing across process boundaries
+
+---
+
 ### Level 5: The Delta Storm
 **File:** `level5-race.vhd`
 **Violation:** Delta cycle race condition
@@ -93,6 +128,7 @@ stack exec spellcraft -- test/fixtures/kaos-elf/multi-file/*.vhd
 | 1 | The Hollow Vessel | Undriven signal | VANQUISHED |
 | 2 | The Flickering Flame | Latch inference | VANQUISHED |
 | 3 | The Silent Overflow | Unbounded counter | VANQUISHED |
+| 4 | The Dimensional Rift | Clock domain crossing | FUTURE |
 | 5 | The Delta Storm | Race condition | BEYOND SCOPE |
 | 6 | The Shadowbound Grimoire | Cross-file | VANQUISHED |
 

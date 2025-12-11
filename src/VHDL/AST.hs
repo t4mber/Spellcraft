@@ -1,4 +1,7 @@
 {-# LANGUAGE DeriveGeneric #-}
+{-# OPTIONS_GHC -Wno-partial-fields #-}
+-- | Partial fields are intentional in this module - sum types like Expression,
+-- | Statement, and ArchStatement have constructors with different record fields.
 
 -- ADC-IMPLEMENTS: spellcraft-adc-001
 -- ADC-IMPLEMENTS: spellcraft-adc-008

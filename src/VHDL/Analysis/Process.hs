@@ -1,4 +1,6 @@
 {-# LANGUAGE DeriveGeneric #-}
+{-# OPTIONS_GHC -Wno-partial-fields #-}
+-- | Partial fields are intentional - Statement is a sum type with different record fields.
 
 -- ADC-IMPLEMENTS: spellcraft-adc-004
 module VHDL.Analysis.Process

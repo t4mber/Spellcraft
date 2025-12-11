@@ -57,7 +57,6 @@ findCombinatorialPaths :: Expression -> [CombinatorialPath]
 findCombinatorialPaths expr =
   let depth = calculatePathDepth expr
       ops = extractOperations expr
-      loc = undefined  -- Would need location tracking in Expression
   in if depth > 0
      then [CombinatorialPath expr depth ops (error "Location not tracked in prototype")]
      else []
@@ -95,8 +94,8 @@ extractPathsFromStatement (ClockedAssignment _ _ _) = []
 
 -- Create warning from path
 mkWarning :: Maybe Identifier -> Int -> CombinatorialPath -> ComplexityWarning
-mkWarning procName threshold path = ComplexityWarning
-  { cwProcess = procName
+mkWarning pName threshold path = ComplexityWarning
+  { cwProcess = pName
   , cwPath = path
   , cwThreshold = threshold
   , cwMessage = T.pack $ "Combinatorial path has " <> show (cpDepth path)

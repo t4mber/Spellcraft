@@ -1,4 +1,6 @@
 {-# LANGUAGE OverloadedStrings #-}
+{-# OPTIONS_GHC -Wno-partial-fields #-}
+-- | Partial fields are intentional - CFGNode and ControlFlowViolation are sum types.
 
 -- ADC-IMPLEMENTS: spellcraft-adc-012
 -- Priority 2: Control Flow Analysis for latch inference detection
@@ -24,7 +26,6 @@ import Data.Set (Set)
 import qualified Data.Set as Set
 import Data.Text (Text)
 import qualified Data.Text as Text
-import Data.Maybe (mapMaybe, catMaybes)
 import VHDL.AST
 import VHDL.SourceLocation (SourceLocation(..))
 
@@ -131,7 +132,7 @@ addEdge from to cond st = st { bsEdges = (from, to, cond) : bsEdges st }
 -- | Build CFG from process statement body
 -- ADC-IMPLEMENTS: spellcraft-adc-012 Section: Control Flow Analysis
 buildCFG :: [Statement] -> SourceLocation -> ControlFlowGraph
-buildCFG stmts procLoc =
+buildCFG stmts _procLoc =
   let -- Create entry node
       (entryId, st1) = allocNodeId initBuildState
       entryNode = EntryNode entryId
@@ -195,12 +196,11 @@ buildStmtCFG (IfStatement cond thenStmts elsifs elseStmts loc) prevIds st =
 
       -- Build then branch
       (thenExitIds, st4) = buildStmtsCFG thenStmts [condId] st3
-      st5 = foldr (\_ s -> s) st4 thenExitIds  -- Edge already added by buildStmtsCFG
       -- Actually add true branch edge from cond to first then statement
-      st5' = if null thenStmts
-             then st4
-             else let firstThenId = head $ getFirstNodes thenStmts st4
-                  in addEdge condId firstThenId (TrueBranch cond) st4
+      st5' = case (thenStmts, getFirstNodes thenStmts st4) of
+               ([], _) -> st4
+               (_, firstThenId:_) -> addEdge condId firstThenId (TrueBranch cond) st4
+               (_, []) -> st4
 
       -- Build elsif branches (chain of conditionals)
       (elsifExitIds, st6) = buildElsifsCFG elsifs condId st5'
@@ -248,7 +248,7 @@ buildStmtCFG (CaseStatement expr whenClauses loc) prevIds st =
   in ([mergeId], st7)
 
 -- Loop statement: simplified - treat body as sequential
-buildStmtCFG (LoopStatement _ _ body loc) prevIds st =
+buildStmtCFG (LoopStatement _ _ body _loc) prevIds st =
   buildStmtsCFG body prevIds st
 
 -- Wait/Null: no effect on control flow
@@ -421,12 +421,12 @@ findFirstAssignmentLoc signal stmts defaultLoc =
     findInStmt _ = Nothing
 
     findInElsifs [] = Nothing
-    findInElsifs ((_, stmts):rest) =
-      findInStmts stmts `orElse` findInElsifs rest
+    findInElsifs ((_, elsifStmts):rest) =
+      findInStmts elsifStmts `orElse` findInElsifs rest
 
     findInWhenClauses [] = Nothing
-    findInWhenClauses ((_, stmts):rest) =
-      findInStmts stmts `orElse` findInWhenClauses rest
+    findInWhenClauses ((_, whenStmts):rest) =
+      findInStmts whenStmts `orElse` findInWhenClauses rest
 
     orElse Nothing b = b
     orElse a _ = a

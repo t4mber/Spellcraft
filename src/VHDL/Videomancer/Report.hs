@@ -26,8 +26,6 @@ import Data.Aeson (ToJSON)
 import GHC.Generics (Generic)
 import Data.List (partition)
 import VHDL.AST (VHDLDesign(..))
-import VHDL.Analysis.ClockGraph (ClockGraph)
-import VHDL.Videomancer.Config (ProgramConfig(..))
 import VHDL.Videomancer.Validation
 import VHDL.Videomancer.Constraint
 
@@ -122,7 +120,7 @@ determineOverallStatus :: [VHDLDesign]
                        -> AnalysisResult
                        -> Either [ConstraintViolation] ValidationReport
                        -> ReportStatus
-determineOverallStatus designs analysis validation =
+determineOverallStatus _designs analysis validation =
   let hasFreqViolations = not (null (arViolations analysis))
       hasParamErrors = case validation of
         Left violations -> any (\v -> cvSeverity v == Error) violations

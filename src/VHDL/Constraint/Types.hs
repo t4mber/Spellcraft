@@ -1,4 +1,6 @@
 {-# LANGUAGE DeriveGeneric #-}
+{-# OPTIONS_GHC -Wno-partial-fields #-}
+-- | Partial fields are intentional - ConstraintViolation constructors have different fields.
 
 -- ADC-IMPLEMENTS: spellcraft-adc-002
 -- ADC-IMPLEMENTS: spellcraft-adc-014 Section: Core Types

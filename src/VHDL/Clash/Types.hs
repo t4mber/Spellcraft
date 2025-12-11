@@ -2,6 +2,8 @@
 {-# LANGUAGE AllowAmbiguousTypes #-}
 {-# LANGUAGE PolyKinds #-}
 {-# LANGUAGE TypeApplications #-}
+{-# OPTIONS_GHC -Wno-redundant-constraints #-}
+-- | KnownNat constraints appear redundant but are needed for natVal calls at runtime.
 
 -- ADC-IMPLEMENTS: spellcraft-adc-006
 module VHDL.Clash.Types
@@ -26,9 +28,8 @@ module VHDL.Clash.Types
   ) where
 
 import Data.Text (Text)
-import qualified Data.Text as T
 import GHC.TypeLits (Nat, KnownNat, natVal)
-import GHC.TypeNats (Div, type (<=?))
+import GHC.TypeNats (Div)
 import Data.Proxy (Proxy(..))
 import qualified GHC.TypeNats as TN
 
@@ -74,8 +75,7 @@ data HWSignal (freq :: FreqMHz) a = HWSignal
   } deriving (Show, Eq)
 
 -- | Smart constructor for HWSignal
-mkHWSignal :: forall freq a. KnownNat freq
-           => Text
+mkHWSignal :: forall freq a. Text
            -> ClockDomain freq
            -> HWSignal freq a
 mkHWSignal name domain = HWSignal
@@ -96,6 +96,8 @@ data PLL (inFreq :: FreqMHz) (factor :: Nat) = PLL
 
 -- | Smart constructor for PLL
 -- Validates that input and output frequencies are correctly related
+-- Note: outFreq type parameter is intentionally used for compile-time frequency verification
+-- KnownNat outFreq is needed to compute the output frequency at runtime
 mkPLL :: forall inFreq factor outFreq.
          (KnownNat inFreq, KnownNat factor, KnownNat outFreq,
           outFreq ~ FreqMult inFreq factor)

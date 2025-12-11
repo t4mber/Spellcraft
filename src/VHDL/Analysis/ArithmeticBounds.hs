@@ -1,4 +1,6 @@
 {-# LANGUAGE OverloadedStrings #-}
+{-# OPTIONS_GHC -Wno-partial-fields #-}
+-- | Partial fields are intentional - ArithmeticViolation is a sum type.
 
 -- ADC-IMPLEMENTS: spellcraft-adc-012
 -- Priority 3: Arithmetic Bounds Checker for overflow detection
@@ -16,11 +18,9 @@ module VHDL.Analysis.ArithmeticBounds
 
 import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map
-import Data.Set (Set)
-import qualified Data.Set as Set
 import Data.Text (Text)
 import qualified Data.Text as Text
-import Data.Maybe (mapMaybe, catMaybes, listToMaybe)
+import Data.Maybe (mapMaybe)
 import VHDL.AST
 import VHDL.SourceLocation (SourceLocation(..))
 

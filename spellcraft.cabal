@@ -1,6 +1,6 @@
 cabal-version:      3.0
 name:               spellcraft
-version:            0.5.0
+version:            0.8.0
 synopsis:           Spellcraft - Safe Programmable Electronics Linting Library
 description:
   Spellcraft: Safe Programmable Electronics Linting Library & Code Review Analysis Framework Tool.
@@ -72,6 +72,7 @@ library
     VHDL.CLI.Format
     VHDL.CLI.Report
     VHDL.CLI.Color
+    VHDL.CLI.Export
     VHDL.Videomancer.Config
     VHDL.Videomancer.Constraint
     VHDL.Videomancer.Validation
@@ -115,10 +116,13 @@ test-suite spellcraft-test
     VHDL.Clash.TypeLevelSpec
     VHDL.Clash.ExampleValidationSpec
     VHDL.Videomancer.ConfigSpec
+    VHDL.Parser.WorkLibrarySpec
+    VHDL.Analysis.MultiFileSpec
   build-depends:
     , base
     , spellcraft
     , hspec >= 2.9
+    , hspec-discover >= 2.9
     , QuickCheck >= 2.14
     , text
     , containers

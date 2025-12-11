@@ -6,20 +6,17 @@ module VHDL.Analysis.Propagation
   , PathStep(..)
   ) where
 
-import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map
-import Data.Maybe (mapMaybe, listToMaybe)
+import Data.Maybe (listToMaybe)
 import VHDL.AST (Identifier, SignalName, ComponentInst(..))
 import VHDL.Analysis.ClockGraph
-  ( AnalysisError
-  , ClockEdge(..)
+  ( ClockEdge(..)
   , ClockGraph(..)
   , ClockNode(..)
-  , ClockSource(..)
+  , AnalysisError(..)
   )
 import VHDL.Analysis.FrequencyCalc (calculateOutputFrequency)
 import VHDL.Constraint.Library (ComponentLibrary, lookupComponent)
-import qualified Data.Text as T
 import Debug.Trace (trace)
 
 -- | Clock path for tracing

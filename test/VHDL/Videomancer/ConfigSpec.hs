@@ -14,20 +14,22 @@ spec :: Spec
 spec = do
   describe "Videomancer Config Loading" $ do
     it "loads Lumarian configuration successfully" $ do
-      result <- loadProgramConfig "contrib/lzx/lumarian/lumarian.json"
+      result <- loadProgramConfig "test/fixtures/videomancer/test-lumarian.json"
       result `shouldSatisfy` isRight
-
-      let Right config = result
-      progName config `shouldBe` "Lumarian"
-      length (progParameters config) `shouldBe` 12
+      case result of
+        Right config -> do
+          progName config `shouldBe` "Lumarian"
+          length (progParameters config) `shouldBe` 12
+        Left err -> expectationFailure $ "Expected Right but got Left: " ++ show err
 
     it "loads Mirrorbound configuration successfully" $ do
-      result <- loadProgramConfig "contrib/lzx/mirrorbound/mirrorbound.json"
+      result <- loadProgramConfig "test/fixtures/videomancer/test-mirrorbound.json"
       result `shouldSatisfy` isRight
-
-      let Right config = result
-      progName config `shouldBe` "Mirrorbound"
-      length (progParameters config) `shouldBe` 12
+      case result of
+        Right config -> do
+          progName config `shouldBe` "Mirrorbound"
+          length (progParameters config) `shouldBe` 12
+        Left err -> expectationFailure $ "Expected Right but got Left: " ++ show err
 
   describe "Parameter Validation" $ do
     describe "RANGE parameters" $ do

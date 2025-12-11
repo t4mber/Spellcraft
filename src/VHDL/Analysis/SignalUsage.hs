@@ -63,7 +63,7 @@ analyzeSignalUsageWithContext :: AnalysisContext -> Architecture -> [SignalViola
 analyzeSignalUsageWithContext ctx arch =
   let signals = collectSignalDecls arch
       assignments = collectSignalAssignmentsWithContext ctx arch
-      reads = collectSignalReads arch
+      signalReads = collectSignalReads arch
 
       -- Check for undriven signals (declared but never assigned)
       undrivenViolations =
@@ -85,7 +85,7 @@ analyzeSignalUsageWithContext ctx arch =
             }
         | sig <- signals
         , siName sig `Map.member` assignments
-        , not (siName sig `Set.member` reads)
+        , not (siName sig `Set.member` signalReads)
         ]
   in undrivenViolations ++ unusedViolations
 
@@ -117,33 +117,6 @@ collectSignalAssignmentsWithContext :: AnalysisContext -> Architecture -> Map Id
 collectSignalAssignmentsWithContext ctx arch =
   let stmtAssignments = concatMap (collectFromArchStatementWithContext ctx) (archStatements arch)
   in Map.fromListWith (++) stmtAssignments
-
--- | Collect assignments from an architecture statement
-collectFromArchStatement :: ArchStatement -> [(Identifier, [SourceLocation])]
-collectFromArchStatement (ProcessStmt _ _ stmts _loc) =
-  -- Collect assignments from process statements
-  concatMap collectFromSeqStatement stmts
-collectFromArchStatement (ConcurrentAssignment target _ loc) =
-  -- ADC-IMPLEMENTS: spellcraft-adc-022
-  -- Target is now an Expression, extract base signal name
-  case targetToSignalName target of
-    Just name -> [(name, [loc])]
-    Nothing -> []  -- Complex target without clear signal name
-collectFromArchStatement (ComponentInstStmt inst) =
-  -- ADC-IMPLEMENTS: spellcraft-adc-012
-  -- Component output ports assign to signals
-  -- Heuristic: Assume ports with common output names are outputs
-  -- Full solution requires parsing component entity declarations
-  let portMaps = compPortMap inst
-      outputPorts = filter isLikelyOutputPort portMaps
-  in [ (targetSignal, [compLocation inst])
-     | (_, expr) <- outputPorts
-     , Just targetSignal <- [targetToSignalName expr]
-     ]
--- ADC-IMPLEMENTS: spellcraft-adc-028
--- Handle generate statements by recursively collecting from nested statements
-collectFromArchStatement (GenerateStmt genStmt) =
-  concatMap collectFromArchStatement (genStatements genStmt)
 
 -- | Collect assignments from an architecture statement with multi-file context
 -- ADC-IMPLEMENTS: spellcraft-adc-029
@@ -239,8 +212,8 @@ isLikelyOutputPort :: (Expression, Expression) -> Bool
 isLikelyOutputPort (formalExpr, _) =
   case formalToIdentifier formalExpr of
     Nothing -> False  -- Can't determine, assume input
-    Just portName ->
-      let lowerName = Text.toLower portName
+    Just pName ->
+      let lowerName = Text.toLower pName
       in -- Common VHDL output port naming conventions
          (any (`Text.isInfixOf` lowerName)
            [ "result", "output", "out", "valid", "ready", "done"

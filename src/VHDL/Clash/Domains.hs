@@ -32,14 +32,10 @@ import Data.Text (Text)
 import qualified Data.Text as T
 import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map
-import GHC.TypeLits (Nat, KnownNat, natVal)
-import Data.Proxy (Proxy(..))
 import VHDL.Clash.Types
   ( FreqMHz
   , ClockDomain(..)
-  , HWSignal(..)
   , mkClockDomain
-  , natToInteger
   )
 
 -- | Registry for managing clock domains
@@ -54,8 +50,8 @@ emptyRegistry :: DomainRegistry
 emptyRegistry = DomainRegistry Map.empty
 
 -- | Register a clock domain in the registry
-registerDomain :: forall freq. KnownNat freq
-               => Text  -- domain name
+-- Note: freq type parameter used for type applications in tests
+registerDomain :: forall freq. Text  -- domain name
                -> Text  -- description
                -> ClockDomain freq
                -> DomainRegistry
@@ -81,9 +77,7 @@ data DomainRelation
   deriving (Show, Eq)
 
 -- | Determine the relationship between two clock domains
-relateDomains :: forall freq1 freq2.
-                 (KnownNat freq1, KnownNat freq2)
-              => ClockDomain freq1
+relateDomains :: ClockDomain freq1
               -> ClockDomain freq2
               -> DomainRelation
 relateDomains domain1 domain2 =
@@ -102,9 +96,7 @@ isRationalMultiple f1 f2 =
   in g > 1
 
 -- | Check if two domains can be safely connected
-checkDomainCompatibility :: forall freq1 freq2.
-                            (KnownNat freq1, KnownNat freq2)
-                         => ClockDomain freq1
+checkDomainCompatibility :: ClockDomain freq1
                          -> ClockDomain freq2
                          -> (Bool, Text)
 checkDomainCompatibility domain1 domain2 =
@@ -134,9 +126,7 @@ data DomainCrossing (srcFreq :: FreqMHz) (dstFreq :: FreqMHz) = DomainCrossing
   } deriving (Show, Eq)
 
 -- | Create a domain crossing
-createCrossing :: forall srcFreq dstFreq.
-                  (KnownNat srcFreq, KnownNat dstFreq)
-               => Text
+createCrossing :: Text
                -> ClockDomain srcFreq
                -> ClockDomain dstFreq
                -> CrossingStrategy
@@ -150,9 +140,7 @@ createCrossing name srcDomain dstDomain strategy = DomainCrossing
   }
 
 -- | Validate a domain crossing
-validateCrossing :: forall srcFreq dstFreq.
-                    (KnownNat srcFreq, KnownNat dstFreq)
-                 => DomainCrossing srcFreq dstFreq
+validateCrossing :: DomainCrossing srcFreq dstFreq
                  -> Either Text (DomainCrossing srcFreq dstFreq)
 validateCrossing crossing =
   let (compatible, msg) = checkDomainCompatibility

@@ -4,12 +4,11 @@ module VHDL.Analysis.FrequencyCalc
   ) where
 
 import Data.List (find)
-import Data.Text (Text)
 import qualified Data.Text as T
 import VHDL.AST (Identifier, Value(..), Expression(..), Literal(..))
 import VHDL.Analysis.ClockGraph (AnalysisError(..))
-import VHDL.Constraint.Types (ComponentSpec(..), GenericConstraint(..))
 import VHDL.SourceLocation (mkSourceLocation)
+import VHDL.Constraint.Types (ComponentSpec(..))
 
 -- | Calculate output frequency for a component given its generics and input frequency
 -- Contract: spellcraft-adc-003 Section: Interface
@@ -19,7 +18,7 @@ exprToValue :: Expression -> Maybe Value
 exprToValue (LiteralExpr (IntLiteral i)) = Just (IntValue i)
 exprToValue (LiteralExpr (RealLiteral r)) = Just (RealValue r)
 exprToValue (LiteralExpr (StringLiteral s)) = Just (StringValue s)
-exprToValue (IdentifierExpr id) = Just (IdentifierValue id)
+exprToValue (IdentifierExpr ident) = Just (IdentifierValue ident)
 exprToValue _ = Nothing  -- Complex expressions not yet supported
 
 calculateOutputFrequency

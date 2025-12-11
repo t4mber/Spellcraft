@@ -12,16 +12,13 @@ module VHDL.CLI.Videomancer
   ) where
 
 import Control.Monad (forM)
-import Data.Maybe (fromMaybe)
-import Data.Text (Text)
-import qualified Data.Text as T
 import qualified Data.Text.IO as TIO
 import GHC.Generics (Generic)
 import System.Exit (ExitCode(..), exitWith)
 import System.FilePath.Glob (glob)
 
 import VHDL.Parser (parseVHDLFile)
-import VHDL.Videomancer.Config (loadProgramConfig, ProgramConfig)
+import VHDL.Videomancer.Config (loadProgramConfig)
 import VHDL.Videomancer.Analysis (analyzeVideoHardware)
 import qualified VHDL.Videomancer.Analysis as Analysis
 import VHDL.Videomancer.Validation (validateParameterSoundness, ValidationMode(..), ValidationReport(..), ValidationStatus(..))
@@ -40,7 +37,7 @@ data VideomancerOptions = VideomancerOptions
 -- | Run Videomancer analysis
 -- Contract: spellcraft-adc-010 Section: Tool
 runVideomancer :: VideomancerOptions -> IO ExitCode
-runVideomancer opts@VideomancerOptions{..} = do
+runVideomancer VideomancerOptions{..} = do
   when voVerbose $
     putStrLn "🎬 Videomancer: Video Hardware Analysis Mode"
 

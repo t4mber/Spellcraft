@@ -3,11 +3,10 @@ module VHDL.Analysis.Violation
   ( detectFrequencyViolations
   ) where
 
-import Data.Maybe (maybeToList, mapMaybe, catMaybes)
 import Data.Text (Text)
 import qualified Data.Map.Strict as Map
-import VHDL.AST (Identifier, ComponentInst(..), SignalName, PortDirection(..), Expression(..))
-import VHDL.Analysis.ClockGraph (ClockGraph(..), ClockNode(..), ClockEdge(..))
+import VHDL.AST (Identifier, ComponentInst(..), Expression(..), PortDirection(..))
+import VHDL.Analysis.ClockGraph (ClockGraph(..), ClockNode(..))
 import VHDL.Constraint.Library (ComponentLibrary, lookupComponent)
 import VHDL.Constraint.Types
   ( ConstraintViolation(..)

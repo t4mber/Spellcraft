@@ -4,6 +4,7 @@
 -- ADC-IMPLEMENTS: spellcraft-adc-005
 -- ADC-IMPLEMENTS: spellcraft-adc-014 Section: Report Updates
 -- ADC-IMPLEMENTS: spellcraft-adc-029
+-- ADC-IMPLEMENTS: spellcraft-adc-031 Section: Report Integration
 module VHDL.CLI.Report
   ( -- * Reports
     AnalysisReport(..)
@@ -12,11 +13,10 @@ module VHDL.CLI.Report
   ) where
 
 import Control.Monad (when, unless)
-import Data.Aeson (ToJSON, encode)
+import Data.Aeson (ToJSON)
 import qualified Data.Text as T
 import qualified Data.Text.IO as TIO
-import qualified Data.Text.Lazy as TL
-import qualified Data.Text.Lazy.Encoding as TLE
+import Data.Time (getCurrentTime, formatTime, defaultTimeLocale)
 import GHC.Generics (Generic)
 import System.Exit (ExitCode(..))
 import System.IO (hFlush, stdout)
@@ -28,6 +28,7 @@ import VHDL.CLI.Format
   , formatViolation
   )
 import VHDL.CLI.Options (CliOptions(..), OutputFormat(..))
+import VHDL.CLI.Export (exportJSON, exportSARIF)
 import VHDL.Constraint.Types (ConstraintViolation(..), Severity(..), violationSeverity)
 import VHDL.Constraint.Library (ComponentLibrary)
 import VHDL.Parser (ParseError, parseVHDLFile)
@@ -35,13 +36,12 @@ import ComponentLibs.TestComponents (testComponentLibrary)
 import VHDL.Analysis.ClockGraph (buildClockGraph)
 import VHDL.Analysis.Propagation (propagateFrequencies)
 import VHDL.Analysis.Violation (detectFrequencyViolations)
-import VHDL.Analysis.ClashFile (analyzeClashFile, ClashAnalysisResult(..), ClashViolation(..), clashViolationToConstraint)
+import VHDL.Analysis.ClashFile (analyzeClashFile, ClashAnalysisResult(..), clashViolationToConstraint)
 import VHDL.Analysis.SignalUsage (analyzeSignalUsageWithContext, SignalViolation(..), violationSignal, violationLocation, violationType)
 import VHDL.Analysis.MultiFile (buildContext)
 import VHDL.Analysis.ControlFlow (analyzeControlFlow, ControlFlowViolation(..), latchSignal, latchLocation, latchDescription)
 import VHDL.Analysis.ArithmeticBounds (checkArithmeticBounds, ArithmeticViolation(..))
 import VHDL.AST (VHDLDesign, designArchitectures)
-import VHDL.SourceLocation (SourceLocation(..))
 import System.FilePath (takeExtension)
 
 -- | Analysis report
@@ -130,7 +130,7 @@ runAnalysis opts = do
       in (vhdl, clash)
 
     extractClashViolations :: Either String ClashAnalysisResult -> [ConstraintViolation]
-    extractClashViolations (Left err) =
+    extractClashViolations (Left _err) =
       -- Create a parse-like error for Clash analysis failures
       []  -- For now, silently skip errors
     extractClashViolations (Right result) =
@@ -139,9 +139,27 @@ runAnalysis opts = do
 -- | Generate and display report
 -- Contract: spellcraft-adc-005 Section: Interface
 -- ADC-IMPLEMENTS: spellcraft-adc-014 Section: Report Updates
+-- ADC-IMPLEMENTS: spellcraft-adc-031 Section: Report Generation
 generateReport :: CliOptions -> AnalysisReport -> IO ()
 generateReport opts report = case optOutputFormat opts of
-  JSON -> TIO.putStrLn $ TL.toStrict $ TLE.decodeUtf8 $ encode report
+  JSON -> do
+    -- ADC-IMPLEMENTS: spellcraft-adc-031 Section: JSON Export
+    now <- getCurrentTime
+    let timestamp = T.pack $ formatTime defaultTimeLocale "%Y-%m-%dT%H:%M:%SZ" now
+    let jsonOutput = exportJSON
+          timestamp
+          (reportFiles report)
+          (reportViolations report)
+          (reportParseErrors report)
+          (reportSuccess report)
+    TIO.putStrLn jsonOutput
+
+  SARIF -> do
+    -- ADC-IMPLEMENTS: spellcraft-adc-031 Section: SARIF Export
+    let sarifOutput = exportSARIF
+          (reportViolations report)
+          (reportParseErrors report)
+    TIO.putStrLn sarifOutput
 
   _ -> do
     -- Human-readable or GCC format
@@ -206,13 +224,6 @@ printViolationBySeverity fmt suppressWarnings violation = do
     SeverityInfo ->
       unless suppressWarnings $ do
         TIO.putStrLn formatted  -- No color for info
-
--- | Print violation (legacy - uses red for all)
-printViolation :: OutputFormat -> ConstraintViolation -> IO ()
-printViolation fmt violation = do
-  let formatted = formatViolation fmt violation
-  msg <- red formatted
-  TIO.putStrLn msg
 
 printWarning :: OutputFormat -> ComplexityWarning -> IO ()
 printWarning fmt warning = do
