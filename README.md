@@ -196,7 +196,7 @@ BSD-3-Clause
 
 ## CI/CD Integration
 
-Spellcraft includes GitHub Actions workflows for automated analysis. See [`.github/README.md`](.github/README.md) for full documentation.
+Spellcraft includes GitHub Actions workflows for automated analysis. See [`.github/CI.md`](.github/CI.md) for full documentation.
 
 ### Quick Start
 
